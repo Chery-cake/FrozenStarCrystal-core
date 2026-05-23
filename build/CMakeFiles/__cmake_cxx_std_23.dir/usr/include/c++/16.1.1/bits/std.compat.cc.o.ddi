@@ -1,0 +1,21 @@
+{
+  "revision": 0,
+  "rules": [
+    {
+      "primary-output": "CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.compat.cc.o",
+      "provides": [
+        {
+          "is-interface": true,
+          "logical-name": "std.compat",
+          "source-path": "/usr/include/c++/16.1.1/bits/std.compat.cc"
+        }
+      ],
+      "requires": [
+        {
+          "logical-name": "std"
+        }
+      ]
+    }
+  ],
+  "version": 1
+}

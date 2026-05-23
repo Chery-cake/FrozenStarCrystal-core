@@ -1,0 +1,7 @@
+ninja_dyndep_version = 1.0
+build CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.cc.o | CMakeFiles/__cmake_cxx_std_23.dir/std.pcm: dyndep
+  restat = 1
+
+build CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.compat.cc.o | CMakeFiles/__cmake_cxx_std_23.dir/std.compat.pcm: dyndep | CMakeFiles/__cmake_cxx_std_23.dir/std.pcm
+  restat = 1
+

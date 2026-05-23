@@ -1,0 +1,9 @@
+/home/chery/Documents/FrozenStars/build/CMakeFiles/FrozenStars.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/test.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/edit_cache.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/rebuild_cache.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/list_install_components.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/install.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/install/local.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/install/strip.dir
+/home/chery/Documents/FrozenStars/build/CMakeFiles/__cmake_cxx_std_23.dir

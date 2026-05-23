@@ -1,0 +1,20 @@
+[
+{
+  "directory": "/home/chery/Documents/FrozenStars/build",
+  "command": "/usr/bin/clang++ -DDEBUG -DENGINE_DEBUG -D_DEBUG -D_GNU_SOURCE -g -std=c++23 -fdiagnostics-color=always -Wall -Wextra -Wpedantic -g3 -O0 -fno-omit-frame-pointer -fno-optimize-sibling-calls -fstack-protector-strong @CMakeFiles/FrozenStars.dir/src/main.cpp.o.modmap -o CMakeFiles/FrozenStars.dir/src/main.cpp.o -c /home/chery/Documents/FrozenStars/src/main.cpp",
+  "file": "/home/chery/Documents/FrozenStars/src/main.cpp",
+  "output": "/home/chery/Documents/FrozenStars/build/CMakeFiles/FrozenStars.dir/src/main.cpp.o"
+},
+{
+  "directory": "/home/chery/Documents/FrozenStars/build",
+  "command": "/usr/bin/clang++ -g -std=c++23 -fdiagnostics-color=always @CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.cc.o.modmap -o CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.cc.o -c /usr/include/c++/16.1.1/bits/std.cc",
+  "file": "/usr/include/c++/16.1.1/bits/std.cc",
+  "output": "/home/chery/Documents/FrozenStars/build/CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.cc.o"
+},
+{
+  "directory": "/home/chery/Documents/FrozenStars/build",
+  "command": "/usr/bin/clang++ -g -std=c++23 -fdiagnostics-color=always @CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.compat.cc.o.modmap -o CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.compat.cc.o -c /usr/include/c++/16.1.1/bits/std.compat.cc",
+  "file": "/usr/include/c++/16.1.1/bits/std.compat.cc",
+  "output": "/home/chery/Documents/FrozenStars/build/CMakeFiles/__cmake_cxx_std_23.dir/usr/include/c++/16.1.1/bits/std.compat.cc.o"
+}
+]
