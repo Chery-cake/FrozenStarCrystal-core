@@ -5,6 +5,8 @@ set(CLANGD_CONTENT "# File generated automatically
 CompileFlags:
   CompilationDatabase: ${CMAKE_BINARY_DIR}
 
+  Add: [-xc++, -std=c++23]
+
 Diagnostics:
   UnusedIncludes: Strict
   ClangTidy:

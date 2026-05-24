@@ -1,33 +1,18 @@
-#ifndef BUMP_ALLOCATOR_H_
-#define BUMP_ALLOCATOR_H_
+module;
 
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <mutex>
+export module memory.allocator;
 
-namespace core {
+import std.compat;
+
+export namespace memory::allocator {
 
 /**
  * @brief Base class for memory allocation
- * The memory is istored in a unique_ptr<uint_8>
+ * The memory is stored in a unique_ptr<uint_8>
  */
-template <size_t size> class MemoryAllocator {
-public:
-  explicit MemoryAllocator();
-  virtual ~MemoryAllocator();
-
-  // Disable copy and move
-  MemoryAllocator(const MemoryAllocator &) = delete;
-  MemoryAllocator &operator=(const MemoryAllocator &) = delete;
-  MemoryAllocator(MemoryAllocator &&) = delete;
-  MemoryAllocator &operator=(MemoryAllocator &&) = delete;
-
-  /**
-   * @brief Return the allocated byte size
-   * @return size_t
-   */
-  [[nodiscard]] size_t capacity() const { return size; }
+template <size_t size> class Memory {
+private:
+  std::unique_ptr<uint8_t, void (*)(uint8_t *)> memory_;
 
 protected:
   mutable std::mutex memoryMutex_;
@@ -39,17 +24,33 @@ protected:
   [[nodiscard]] const uint8_t *memory() const { return memory_.get(); }
   [[nodiscard]] uint8_t *memory() { return memory_.get(); }
 
-private:
-  std::unique_ptr<uint8_t, void (*)(uint8_t *)> memory_;
+public:
+  explicit Memory();
+  virtual ~Memory();
+
+  // Disable copy and move
+  Memory(const Memory &) = delete;
+  Memory &operator=(const Memory &) = delete;
+  Memory(Memory &&) = delete;
+  Memory &operator=(Memory &&) = delete;
+
+  /**
+   * @brief Return the allocated byte size
+   * @return size_t
+   */
+  [[nodiscard]] size_t capacity() const { return size; }
 };
 
 /**
  * @brief Bump Allocator for fast allocations
  */
-template <size_t size> class BumpAllocator : public MemoryAllocator<size> {
+template <size_t size> class Bump : public Memory<size> {
+private:
+  size_t offset_;
+
 public:
-  explicit BumpAllocator();
-  ~BumpAllocator() override;
+  explicit Bump();
+  ~Bump() override;
 
   /**
    * @brief Allocate a object in the memory
@@ -70,18 +71,18 @@ public:
    * @return size_t
    */
   [[nodiscard]] const size_t &bytes_allocated() const { return offset_; }
-
-private:
-  size_t offset_;
 };
 
 /**
  * @brief Stack Allocator for variable allocations
  */
-template <size_t size> class StackAllocator : public MemoryAllocator<size> {
+template <size_t size> class Stack : public Memory<size> {
+private:
+  size_t offset_;
+
 public:
-  explicit StackAllocator();
-  ~StackAllocator() override;
+  explicit Stack();
+  ~Stack() override;
 
   /**
    * @brief Push a object to the memory stack, with a header
@@ -104,19 +105,25 @@ public:
    * @return size_t
    */
   [[nodiscard]] const size_t &bytes_allocated() const { return offset_; }
-
-private:
-  size_t offset_;
 };
 
 /**
  * @brief Pool Allocator for multiple identical allocations
  */
 template <typename T, size_t poolSize>
-class PoolAllocator : public MemoryAllocator<sizeof(T) * poolSize> {
+class Pool : public Memory<sizeof(T) * poolSize> {
+private:
+  union Node {
+    alignas(std::max(alignof(T),
+                     alignof(Node *))) std::array<uint8_t, sizeof(T)> data;
+    Node *next;
+  };
+
+  Node *freeList;
+
 public:
-  explicit PoolAllocator();
-  ~PoolAllocator() override;
+  explicit Pool();
+  ~Pool() override;
 
   /**
    * @brief Allocate the space on the first free position of the list
@@ -137,20 +144,6 @@ public:
    * @retunr size_t
    */
   [[nodiscard]] size_t available() const;
-
-private:
-  union Node {
-    alignas(std::max(alignof(T),
-                     alignof(Node *))) std::array<uint8_t, sizeof(T)> data;
-    Node *next;
-  };
-
-  Node *freeList;
 };
 
-} // namespace core
-
-// template implementation
-#include "../src/memory_allocator_impl.hpp"
-
-#endif // BUMP_ALLOCATOR_H_
+} // namespace memory::allocator

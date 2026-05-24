@@ -1,25 +1,24 @@
-#include "memory_allocator.h"
-#include <algorithm>
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <new>
-#include <print>
-#include <ranges>
+module;
 
-namespace core {
+#include <cstdio>
+
+export module memory.allocator:impl;
+
+import std.compat;
+import memory.allocator;
+
+export namespace memory::allocator {
 
 // ============================================================================
 // MemoryAllocator Implementation
 // ============================================================================
 
 template <size_t size>
-MemoryAllocator<size>::MemoryAllocator()
+Memory<size>::Memory()
     : memory_(static_cast<uint8_t *>(::operator new(size)),
               [](uint8_t *ptr) { ::operator delete(ptr); }) {}
 
-template <size_t size> MemoryAllocator<size>::~MemoryAllocator() {
+template <size_t size> Memory<size>::~Memory() {
   std::lock_guard<std::mutex> lock(memoryMutex_);
   memory_.reset();
 }
@@ -28,26 +27,24 @@ template <size_t size> MemoryAllocator<size>::~MemoryAllocator() {
 // BumpAllocator Implementation
 // ============================================================================
 
-template <size_t size>
-BumpAllocator<size>::BumpAllocator() : MemoryAllocator<size>(), offset_(0) {}
+template <size_t size> Bump<size>::Bump() : Memory<size>(), offset_(0) {}
 
-template <size_t size> BumpAllocator<size>::~BumpAllocator() = default;
+template <size_t size> Bump<size>::~Bump() = default;
 
 template <size_t size>
 template <typename T>
-T *BumpAllocator<size>::allocate(size_t alignment) {
+T *Bump<size>::allocate(size_t alignment) {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
   alignment = std::max(alignment, alignof(T));
 
   size_t allocation = sizeof(T);
   // Align current offset
-  size_t current = reinterpret_cast<uintptr_t>(this->memory() + offset_);
+  auto current = reinterpret_cast<uintptr_t>(this->memory() + offset_);
   size_t aligned = (current + alignment - 1) & ~(alignment - 1);
   size_t padding = aligned - current;
 
   if (offset_ + padding + allocation > this->capacity()) {
-    std::println(stderr,
-                 "[BumpAllocator] Out of memory! Requested: {}, Available: {}",
+    std::println(stderr, "[Bump] Out of memory! Requested: {}, Available: {}",
                  allocation, this->capacity() - offset_);
     throw std::bad_alloc();
   }
@@ -59,7 +56,7 @@ T *BumpAllocator<size>::allocate(size_t alignment) {
   return result;
 }
 
-template <size_t size> void BumpAllocator<size>::reset() {
+template <size_t size> void Bump<size>::reset() {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
   offset_ = 0;
 }
@@ -68,19 +65,18 @@ template <size_t size> void BumpAllocator<size>::reset() {
 // StackAllocator Implementation
 // ============================================================================
 
-template <size_t size>
-StackAllocator<size>::StackAllocator() : MemoryAllocator<size>(), offset_(0) {}
+template <size_t size> Stack<size>::Stack() : Memory<size>(), offset_(0) {}
 
-template <size_t size> StackAllocator<size>::~StackAllocator() = default;
+template <size_t size> Stack<size>::~Stack() = default;
 
 template <size_t size>
 template <typename T>
-T *StackAllocator<size>::push(size_t alignment) {
+T *Stack<size>::push(size_t alignment) {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
   alignment = std::max(alignment, alignof(T));
 
   size_t header_size = sizeof(size_t);
-  size_t start = reinterpret_cast<uintptr_t>(this->memory() + offset_);
+  auto start = reinterpret_cast<uintptr_t>(this->memory() + offset_);
 
   // Align current offset
   size_t aligned_addr =
@@ -90,22 +86,21 @@ T *StackAllocator<size>::push(size_t alignment) {
   size_t totalSize = (aligned_addr + sizeof(T)) - start;
 
   if (offset_ + totalSize > this->capacity()) {
-    std::println(stderr,
-                 "[StackAllocator] Out of memory! Requested: {}, Available: {}",
+    std::println(stderr, "[Stack] Out of memory! Requested: {}, Available: {}",
                  totalSize, this->capacity() - offset_);
     throw std::bad_alloc();
   }
 
-  *reinterpret_cast<size_t *>(header_addr) = totalSize;
+  *reinterpret_cast<size_t *>(header_addr) = totalSize; // TODO check warning
   offset_ += totalSize;
 
   return reinterpret_cast<T *>(aligned_addr);
 }
 
-template <size_t size> void StackAllocator<size>::pop(void *&ptr) {
+template <size_t size> void Stack<size>::pop(void *&ptr) {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
-  size_t *header = reinterpret_cast<size_t *>(reinterpret_cast<uint8_t *>(ptr) -
-                                              sizeof(size_t));
+  auto *header = reinterpret_cast<size_t *>(reinterpret_cast<uint8_t *>(ptr) -
+                                            sizeof(size_t));
   offset_ -= *header;
   ptr = nullptr;
 }
@@ -115,18 +110,17 @@ template <size_t size> void StackAllocator<size>::pop(void *&ptr) {
 // ============================================================================
 
 template <typename T, size_t poolSize>
-PoolAllocator<T, poolSize>::PoolAllocator()
-    : core::MemoryAllocator<sizeof(T) * poolSize>() {
+Pool<T, poolSize>::Pool() : Memory<sizeof(T) * poolSize>() {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
 
   // initialize freeList
   uint8_t *raw_mem = this->memory();
-  uintptr_t base_mem = reinterpret_cast<uintptr_t>(raw_mem);
+  auto base_mem = reinterpret_cast<uintptr_t>(raw_mem);
 
   constexpr size_t NodeAlignment = alignof(Node);
   uintptr_t aligned_base =
       (base_mem + NodeAlignment - 1) & ~(NodeAlignment - 1);
-  Node *mem = reinterpret_cast<Node *>(aligned_base);
+  Node mem = reinterpret_cast<Node *>(aligned_base);
 
   std::ranges::for_each(
       std::views::iota(size_t{0}, poolSize - 1), [&mem](size_t i) {
@@ -137,14 +131,12 @@ PoolAllocator<T, poolSize>::PoolAllocator()
   freeList = reinterpret_cast<Node *>(mem);
 }
 
-template <typename T, size_t poolSize>
-PoolAllocator<T, poolSize>::~PoolAllocator() = default;
+template <typename T, size_t poolSize> Pool<T, poolSize>::~Pool() = default;
 
-template <typename T, size_t poolSize>
-T *PoolAllocator<T, poolSize>::allocate() {
+template <typename T, size_t poolSize> T *Pool<T, poolSize>::allocate() {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
   if (freeList == nullptr) {
-    std::println(stderr, "[PoolAllocator] Out of memory!");
+    std::println(stderr, "[Pool] Out of memory!");
     throw std::bad_alloc();
   }
   Node *node = freeList;
@@ -153,7 +145,7 @@ T *PoolAllocator<T, poolSize>::allocate() {
 }
 
 template <typename T, size_t poolSize>
-void PoolAllocator<T, poolSize>::deallocate(T *&ptr) {
+void Pool<T, poolSize>::deallocate(T *&ptr) {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
 
   Node *node = reinterpret_cast<Node *>(ptr);
@@ -164,7 +156,7 @@ void PoolAllocator<T, poolSize>::deallocate(T *&ptr) {
 }
 
 template <typename T, size_t poolSize>
-size_t PoolAllocator<T, poolSize>::available() const {
+size_t Pool<T, poolSize>::available() const {
   std::lock_guard<std::mutex> lock(this->memoryMutex_);
   size_t count = 0;
   Node *node = freeList;
@@ -175,4 +167,4 @@ size_t PoolAllocator<T, poolSize>::available() const {
   return count;
 }
 
-} // namespace core
+} // namespace memory::allocator

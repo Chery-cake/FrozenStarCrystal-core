@@ -118,41 +118,37 @@ include(AddEngineModule)
 # ==============================================================================
 # Main Application
 # ==============================================================================
-option(EXECUTABLE "Compiles the project as a executable" OFF)
+file(GLOB_RECURSE PRIVATE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h*"
+)
+list(FILTER PRIVATE_FILES EXCLUDE REGEX "\\.(cppm|cc)$")
 
-if(EXECUTABLE)
-    set(${PATH} "")
-else()
-    set(${PATH} "lib/")
-endif()
+file(GLOB_RECURSE PUBLIC_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.c*"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h*"
+)
+list(FILTER PUBLIC_FILES EXCLUDE REGEX "\\.(cppm|cc)$")
 
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/${PATH}*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/${PATH}*.c*"
+file(GLOB_RECURSE MODULES_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cppm"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cppm"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cc"
 )
 
-file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/${PATH}*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/${PATH}*.h*"
-)
-
-file(GLOB_RECURSE PRIVATE_HEADERS CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/${PATH}*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/${PATH}*.h*"
-)
-
-if(EXECUTABLE)
-    add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${PRIVATE_HEADERS})
-else()
-    add_library(${PROJECT_NAME} ${SOURCES} ${HEADERS} ${PRIVATE_HEADERS})
-endif()
+add_library(${PROJECT_NAME})
 
 target_sources(${PROJECT_NAME}
     PRIVATE
-        ${SOURCES}
-        ${PRIVATE_HEADERS}
+        ${PRIVATE_FILES}
     PUBLIC
-        ${HEADERS}
+        ${PUBLIC_FILES}
+)
+target_sources(${PROJECT_NAME}
+    PUBLIC
+        FILE_SET CXX_MODULES FILES
+        ${MODULES_FILES}
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE

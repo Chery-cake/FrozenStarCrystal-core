@@ -1,12 +1,22 @@
 import std.compat;
 
-auto main(int argc, char *argv[]) -> int {
+#include <cstdio>
+#include <cstdlib>
 
-  std::println("argc: ", argc);
+auto main(int argc, char **argv) -> int {
 
-  std::ranges::for_each(std::views::iota(argc, 0), [&argv](uint32_t i) {
-    std::println("argv[{}]: {}", i, argv[i]);
-  });
+  try {
+    std::println("argc: {}", argc);
 
-  return 0;
+    std::ranges::for_each(std::views::iota(0, argc), [&argv](uint32_t i) {
+      std::println("argv[{}]: {}", i, argv[i]);
+    });
+  } catch (const std::exception &e) {
+    std::fputs("Exception: ", stderr);
+    std::fputs(e.what(), stderr);
+    std::fputc('\n', stderr);
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
 }
