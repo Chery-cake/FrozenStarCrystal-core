@@ -133,12 +133,61 @@ void test_scheduler() {
   PASS();
 }
 
+template <typename T> struct FutureTask {
+  std::future<T> future;
+
+  struct promise_type {
+    std::promise<T> promise;
+
+    FutureTask get_return_object() { return FutureTask{promise.get_future()}; }
+    std::suspend_never initial_suspend() noexcept { return {}; }
+    std::suspend_never final_suspend() noexcept { return {}; }
+
+    void return_value(T value) noexcept { promise.set_value(std::move(value)); }
+
+    void unhandled_exception() {
+      promise.set_exception(std::current_exception());
+    }
+  };
+};
+
+FutureTask<bool> run_scheduler_return_probe(concurrency::pool::ThreadPool &t) {
+  const bool before = concurrency::pool::coroutine::isPoolWorker;
+  co_await t.schedule();
+  const bool after = concurrency::pool::coroutine::isPoolWorker;
+  co_return (!before && after);
+}
+
+FutureTask<bool>
+run_scheduler_return_probe2(concurrency::queues::TaskQueue *queue) {
+  const bool before = concurrency::pool::coroutine::isPoolWorker;
+  co_await concurrency::pool::ThreadPool::schedule(queue);
+  const bool after = concurrency::pool::coroutine::isPoolWorker;
+  co_return (!before && after);
+}
+
+void test_scheduler_return_value() {
+  TEST("scheduler return value");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  auto r1 = run_scheduler_return_probe(t);
+  assert(r1.future.get());
+
+  auto r2 = run_scheduler_return_probe2(t.queue());
+  assert(r2.future.get());
+
+  PASS();
+}
+
 int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
   test_create();
   test_submit();
   test_scheduler();
+  test_scheduler_return_value();
 
   std::println("\n{}/{} tests passed", tests_passed, tests_run);
   return (tests_passed == tests_run) ? 0 : 1;
