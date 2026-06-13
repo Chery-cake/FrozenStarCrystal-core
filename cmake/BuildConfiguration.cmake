@@ -93,15 +93,6 @@ function(target_configure_release TARGET_NAME)
             )
         endif()
 
-        # Optional: Enable fast-math (breaks IEEE 754 compliance)
-        # WARNING: This may cause issues with physics simulations, financial
-        # calculations, or any code requiring strict floating-point behavior.
-        if(ENGINE_FAST_MATH)
-            target_compile_options(${TARGET_NAME} PRIVATE
-                $<$<CONFIG:Release>:-ffast-math>
-            )
-        endif()
-
         # Release definitions
         target_compile_definitions(${TARGET_NAME} PRIVATE
             $<$<CONFIG:Release>:
@@ -536,7 +527,7 @@ function(target_configure_build TARGET_NAME)
     target_configure_release(${TARGET_NAME})
 
     # Enable LTO if requested by the target AND the global option is enabled
-    if(CONFIG_ENABLE_LTO AND ENGINE_ENABLE_LTO)
+    if(CONFIG_ENABLE_LTO AND ENGINE_ENABLE_LTO AND BUILD_SHARED_LIBS)
         target_enable_lto(${TARGET_NAME})
     endif()
 
