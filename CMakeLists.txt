@@ -184,17 +184,19 @@ target_configure_platform(${PROJECT_NAME})
 target_configure_rpath(${PROJECT_NAME})
 
 # ==============================================================================
-# Generate .clangd Configuration
-# ==============================================================================
-include(GenerateClangd)
-
-# ==============================================================================
 # Tests
 # ==============================================================================
 option(ENABLE_TESTS "Add and Compile the project tests" OFF)
 if(ENABLE_TESTS)
-  add_subdirectory(tests)
+    include(sanitizers)
+    enable_sanitizers()
+    add_subdirectory(tests)
 endif()
+
+# ==============================================================================
+# Generate .clangd Configuration
+# ==============================================================================
+include(GenerateClangd)
 
 # ==============================================================================
 # Installation

@@ -87,6 +87,10 @@ function(add_module)
 
     create_export(${PROJECT_NAME})
 
+    if(ENABLE_TESTS)
+        enable_sanitizers()
+    endif()
+
     target_configure_build(${PROJECT_NAME} ${ARG_CONFIGS})
     target_configure_platform(${PROJECT_NAME})
     target_configure_rpath(${PROJECT_NAME})
