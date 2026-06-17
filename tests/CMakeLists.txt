@@ -2,12 +2,13 @@
 # Tests - Main Configuration
 # ==============================================================================
 
+set(TEST_OUTPUT_DIR "${OUTPUT_DIR}/tests")
+
 function(add_tests_from_folder FOLDER)
     set(multiValueArgs LIBRARY)
     cmake_parse_arguments(ARG "" "" "${multiValueArgs}" ${ARGN})
 
     file(GLOB test_files CONFIGURE_DEPENDS "${FOLDER}/test*.c*")
-
     file(GLOB helper CONFIGURE_DEPENDS "${FOLDER}/helper*.c*")
 
     foreach(test_file ${test_files})
@@ -16,6 +17,10 @@ function(add_tests_from_folder FOLDER)
         set(TEST_NAME "${FOLDER}_${base_name}")
 
         add_executable(${TEST_EXE} ${test_file})
+
+        set_target_properties(${TEST_EXE} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${TEST_OUTPUT_DIR}"
+        )
 
         target_sources(${TEST_EXE}
             PUBLIC
@@ -31,8 +36,6 @@ function(add_tests_from_folder FOLDER)
         target_compile_options(${TEST_EXE} PRIVATE
             $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:GNU,Clang,AppleClang>>:-UNDEBUG>
             $<$<AND:$<CONFIG:Release>,$<CXX_COMPILER_ID:MSVC>>:/UNDEBUG>
-            $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=address>
-            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=address>
         )
 
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_EXE})

@@ -111,8 +111,14 @@ function(enable_sanitizers)
     set(ENABLED_SANITIZERS "${_san_lower_list}" CACHE INTERNAL "Sanitizers active in this build")
 
     string(REPLACE ";" "," _san_flag_str "${_san_flag_list}")
-    target_compile_options(${PROJECT_NAME} PRIVATE "-fsanitize=${_san_flag_str}")
-    target_link_options(${PROJECT_NAME} PRIVATE "-fsanitize=${_san_flag_str}")
+    target_compile_options(${PROJECT_NAME} PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
+        $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
+        $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
+    )
 
     # Propagate suppression files into ASAN_OPTIONS / LSAN_OPTIONS for CTest.
     set(_target_env "")
@@ -222,8 +228,14 @@ function(enable_sanitizers_test)
     set(ENABLED_SANITIZERS "${_san_lower_list}" CACHE INTERNAL "Sanitizers active in this build")
 
     string(REPLACE ";" "," _san_flag_str "${_san_flag_list}")
-    target_compile_options(${TEST_EXE} PRIVATE "-fsanitize=${_san_flag_str}")
-    target_link_options(${TEST_EXE} PRIVATE "-fsanitize=${_san_flag_str}")
+    target_compile_options(${TEST_EXE} PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
+        $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
+    )
+    target_link_options(${TEST_EXE} PRIVATE
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
+        $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
+    )
 
     # Propagate suppression files into ASAN_OPTIONS / LSAN_OPTIONS for CTest.
     set(_test_env "")
