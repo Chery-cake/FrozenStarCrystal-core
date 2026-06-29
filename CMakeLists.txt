@@ -24,7 +24,7 @@ if(DEFINED ENV{CXX_MODULES_JSON})
     message(STATUS "Modules json included: $ENV{CXX_MODULES_JSON}")
 endif()
 
-project(FrozenStars
+project(FrozenStarCrystal-core
     VERSION 0.1.0
     LANGUAGES CXX C
 )
