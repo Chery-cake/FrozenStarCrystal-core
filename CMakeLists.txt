@@ -17,9 +17,15 @@ endif()
 
 enable_testing()
 
+if(DEFINED ENV{CXX_MODULES_JSON})
+    set(CMAKE_CXX_STDLIB_MODULES_JSON "$ENV{CXX_MODULES_JSON}" CACHE FILEPATH
+        "Path to libc++.modules.json or libstdc++.modules.json (from environment)"
+    )
+    message(STATUS "Modules json included: $ENV{CXX_MODULES_JSON}")
+endif()
+
 project(FrozenStars
     VERSION 0.1.0
-    DESCRIPTION "ECS system, Concurrency modules, Resource Management"
     LANGUAGES CXX C
 )
 

@@ -103,6 +103,9 @@ CMakeUserPresets.json
 build/
 .cache
 
+# Direnv
+.direnv
+
 # files to not be ignored
 
 !*steam_api*
