@@ -193,10 +193,23 @@ target_configure_rpath(${PROJECT_NAME})
 # Tests
 # ==============================================================================
 option(ENABLE_TESTS "Add and Compile the project tests" OFF)
+
 if(ENABLE_TESTS)
     include(sanitizers)
     enable_sanitizers()
     add_subdirectory(tests)
+else()
+    set(_SANITIZERS_APPLIED_GLOBALLY FALSE CACHE INTERNAL "")
+    string(REGEX REPLACE "-fsanitize=[^ ]*" "" CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}")
+    string(REGEX REPLACE "-fsanitize=[^ ]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REGEX REPLACE "-fsanitize=[^ ]*" "" CMAKE_EXE_LINKER_FLAGS   "${CMAKE_EXE_LINKER_FLAGS}")
+    string(REGEX REPLACE "-fsanitize=[^ ]*" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+    string(REGEX REPLACE "-fsanitize=[^ ]*" "" CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}")
+    string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" CMAKE_C_FLAGS   "${CMAKE_C_FLAGS}")
+    string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+    string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" CMAKE_EXE_LINKER_FLAGS   "${CMAKE_EXE_LINKER_FLAGS}")
+    string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+    string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" CMAKE_MODULE_LINKER_FLAGS   "${CMAKE_MODULE_LINKER_FLAGS}")
 endif()
 
 # ==============================================================================
