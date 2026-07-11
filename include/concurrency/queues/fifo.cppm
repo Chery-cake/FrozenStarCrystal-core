@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module concurrency.queues:fifo;
 
@@ -9,7 +9,7 @@ import :queue;
 
 export namespace concurrency::queues {
 
-struct FROZENSTARS_API FifoTaskQueue : public TaskQueue {
+struct FROZENSTARCRYSTAL_CORE_API FifoTaskQueue : public TaskQueue {
 private:
   std::queue<Task> queue_;
   std::mutex mutex_;

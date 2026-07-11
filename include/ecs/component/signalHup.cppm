@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module ecs.component:signalHub;
 
@@ -9,7 +9,7 @@ import signals;
 
 export namespace ecs::component {
 
-struct FROZENSTARS_API SignalHub {
+struct FROZENSTARCRYSTAL_CORE_API SignalHub {
   signals::SignalHub hub;
 
   template <typename Signature, typename Slot>

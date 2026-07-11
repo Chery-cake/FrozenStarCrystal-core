@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module ecs.entity:entities;
 
@@ -9,7 +9,7 @@ import ecs.component;
 
 export namespace ecs::entity {
 
-template <typename... Components> class FROZENSTARS_API Tuple {
+template <typename... Components> class FROZENSTARCRYSTAL_CORE_API Tuple {
   static_assert(
       component::all_dependencies_satisfied<Components...>(),
       "Tuple entity is missing one or more required component dependencies.");
@@ -38,7 +38,7 @@ private:
 //////////////////////////////////////
 
 template <typename Derived, typename... Components>
-class FROZENSTARS_API Linear;
+class FROZENSTARCRYSTAL_CORE_API Linear;
 
 template <typename Derived, typename First, typename... Rest>
 class Linear<Derived, First, Rest...> : public First,
@@ -68,7 +68,7 @@ template <typename Derived> class Linear<Derived> {};
 //////////////////////////////////////
 
 template <typename Derived, typename... Components>
-class FROZENSTARS_API Virtual;
+class FROZENSTARCRYSTAL_CORE_API Virtual;
 
 template <typename Derived, typename First, typename... Rest>
 class Virtual<Derived, First, Rest...>

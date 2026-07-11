@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module concurrency.pool.coroutine:scheduler;
 
@@ -16,7 +16,7 @@ export namespace concurrency::pool::coroutine {
 
 inline thread_local bool isPoolWorker = false;
 
-template <policy::Queue QP> struct FROZENSTARS_API Scheduler {
+template <policy::Queue QP> struct FROZENSTARCRYSTAL_CORE_API Scheduler {
 private:
   queues::TaskQueue &queue_;
 

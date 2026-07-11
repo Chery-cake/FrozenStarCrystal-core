@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module resource:registry;
 
@@ -12,7 +12,7 @@ export namespace resource {
 
 template <typename Tag, typename Resource, typename Policy>
   requires OwnerShipPolicy<Tag, Resource, Policy>
-class FROZENSTARS_API Registry {
+class FROZENSTARCRYSTAL_CORE_API Registry {
 public:
   using SignalCall = void(const Tag *, typename Policy::ReturnType);
   using SignalSlot = std::move_only_function<SignalCall>;

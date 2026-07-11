@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module ecs.component:multiComponent;
 
@@ -9,7 +9,7 @@ import :dependencies;
 
 export namespace ecs::component {
 
-template <typename T, size_t N> struct FROZENSTARS_API MultiComponent {
+template <typename T, size_t N> struct FROZENSTARCRYSTAL_CORE_API MultiComponent {
   std::array<T, N> components;
 
   MultiComponent() = default;
@@ -33,7 +33,7 @@ template <typename T, size_t N> struct FROZENSTARS_API MultiComponent {
 };
 
 template <typename T, size_t N>
-struct FROZENSTARS_API ComponentDependencies<MultiComponent<T, N>> {
+struct FROZENSTARCRYSTAL_CORE_API ComponentDependencies<MultiComponent<T, N>> {
   using required = typename ComponentDependencies<T>::required;
 };
 

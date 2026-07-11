@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 #include <cstdint>
 
 export module signals:signal;
@@ -9,7 +9,7 @@ import std.compat;
 
 export namespace signals {
 
-enum class FROZENSTARS_API ConnectionError : uint8_t {
+enum class FROZENSTARCRYSTAL_CORE_API ConnectionError : uint8_t {
   None = 0,
   NullSlot,
   MaxConnectionsReached
@@ -19,7 +19,7 @@ enum class FROZENSTARS_API ConnectionError : uint8_t {
 using ConnectionId = uint64_t;
 using ConnectionResult = std::expected<ConnectionId, ConnectionError>;
 
-template <typename Signature> class FROZENSTARS_API Signals;
+template <typename Signature> class FROZENSTARCRYSTAL_CORE_API Signals;
 template <typename R, typename... Args> class Signals<R(Args...)> {
 public:
   using Slot = std::move_only_function<R(Args...)>;
@@ -60,7 +60,7 @@ public:
   std::vector<ConnectionId> connection_ids() const;
 };
 
-template <typename Signature> class FROZENSTARS_API ScopedConnection {
+template <typename Signature> class FROZENSTARCRYSTAL_CORE_API ScopedConnection {
 public:
   using SignalType = Signals<Signature>;
 
@@ -85,7 +85,7 @@ public:
   ConnectionId release();
 };
 
-class FROZENSTARS_API SignalHub {
+class FROZENSTARCRYSTAL_CORE_API SignalHub {
 public:
   using DisconnectFunc = std::move_only_function<void()>;
 

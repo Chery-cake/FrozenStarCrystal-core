@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module ecs.component:dynamicStorage;
 
@@ -9,7 +9,7 @@ import :dependencies;
 
 export namespace ecs::component {
 
-struct FROZENSTARS_API DynamicStorage {
+struct FROZENSTARCRYSTAL_CORE_API DynamicStorage {
 private:
   template <typename Tuple> struct check_requirements;
 

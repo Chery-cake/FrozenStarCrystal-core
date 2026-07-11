@@ -11,6 +11,7 @@ function(create_export TARGET_NAME)
     #   EXPORT_MACRO_NAME = <BASE_NAME>_API
     #   EXPORT_FILE_NAME = <target_name>_export.h
     string(TOUPPER ${TARGET_NAME} BASE_NAME_UPPER)
+    string(REGEX REPLACE "-" "_" BASE_NAME_UPPER ${BASE_NAME_UPPER})
     set(EXPORT_MACRO_NAME "${BASE_NAME_UPPER}_API")
     set(EXPORT_HEADER_NAME "${TARGET_NAME}_export.h")
 

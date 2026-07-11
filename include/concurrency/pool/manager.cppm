@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module concurrency.pool:manager;
 
@@ -18,7 +18,7 @@ using PoolRegistry =
 using PoolSignal = signals::Signals<void(const Pool *, ThreadPool *)>;
 using ResizeSignal = signals::Signals<void(const Pool *, size_t, size_t)>;
 
-class FROZENSTARS_API Manager {
+class FROZENSTARCRYSTAL_CORE_API Manager {
 private:
   PoolRegistry registry_;
 

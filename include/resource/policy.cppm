@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module resource:policy;
 
@@ -9,7 +9,7 @@ import std.compat;
 export namespace resource {
 
 template <typename Tag, typename Resource>
-struct FROZENSTARS_API UniquePtrPolicy {
+struct FROZENSTARCRYSTAL_CORE_API UniquePtrPolicy {
   using StoredType = std::unique_ptr<Resource>;
   using IntermediaryToStore = std::unique_ptr<Resource>;
   using InputType = std::unique_ptr<Resource>;
@@ -32,7 +32,7 @@ struct FROZENSTARS_API UniquePtrPolicy {
 };
 
 template <typename Tag, typename Resource>
-struct FROZENSTARS_API SharedPtrPolicy {
+struct FROZENSTARCRYSTAL_CORE_API SharedPtrPolicy {
   using StoredType = std::shared_ptr<Resource>;
   using IntermediaryToStore = std::shared_ptr<Resource>;
   using InputType = std::shared_ptr<Resource>;
@@ -55,7 +55,7 @@ struct FROZENSTARS_API SharedPtrPolicy {
 };
 
 template <typename Tag, typename Resource>
-struct FROZENSTARS_API WeakPtrPolicy {
+struct FROZENSTARCRYSTAL_CORE_API WeakPtrPolicy {
   using StoredType = std::weak_ptr<Resource>;
   using IntermediaryToStore = std::shared_ptr<Resource>;
   using InputType = std::shared_ptr<Resource>;

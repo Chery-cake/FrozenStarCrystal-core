@@ -1,6 +1,6 @@
 module;
 
-#include "FrozenStars_export.h"
+#include "FrozenStarCrystal-core_export.h"
 
 export module concurrency.pool.coroutine:task;
 
@@ -10,7 +10,7 @@ import :state;
 
 export namespace concurrency::pool::coroutine {
 
-template <policy::Suspend SP, typename T> class FROZENSTARS_API CoroutineTask {
+template <policy::Suspend SP, typename T> class FROZENSTARCRYSTAL_CORE_API CoroutineTask {
 public:
   struct promise_type;
   using handle_type = std::coroutine_handle<promise_type>;
