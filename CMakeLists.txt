@@ -175,7 +175,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Debug>:ENGINE_DEBUG>
 )
 
-create_export(${PROJECT_NAME})
+create_export(${PROJECT_NAME} MODULES ${MODULES_FILES})
 
 # ==============================================================================
 # Apply Build Configuration

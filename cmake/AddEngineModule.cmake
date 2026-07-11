@@ -1,6 +1,10 @@
 # cmake/AddEngineModule.cmake
 
 function(create_export TARGET_NAME)
+    # optional MODULES parameter, to pass module files of the target
+    cmake_parse_arguments(ARG "" "" "MODULES" ${ARGN})
+
+
     # Assume the target already exists (add_library called before this)
     # Generate export header with standard naming:
     #   BASE_NAME = uppercase target name
@@ -31,6 +35,12 @@ function(create_export TARGET_NAME)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_HEADER_NAME}
         DESTINATION include/${PROJECT_NAME}
     )
+
+    if(ARG_MODULES)
+        set_source_files_properties(${ARG_MODULES} PROPERTIES
+            OBJECT_DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${EXPORT_HEADER_NAME}"
+        )
+    endif()
 endfunction()
 
 function(add_module)
