@@ -72,52 +72,48 @@ function(enable_sanitizers)
     string(REPLACE ";" "," _san_flag_str "${_san_flag_list}")
 
     # ---- Compiler/linker flags -----------------------------------------
-    if(NOT _SANITIZERS_APPLIED_GLOBALLY)
-        # ---- Remove any already‑present sanitizer flags (make idempotent) ----
-        foreach(_flag_var CMAKE_C_FLAGS CMAKE_CXX_FLAGS
-                        CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
-            string(REGEX REPLACE "-fsanitize=[^ ]*" "" ${_flag_var} "${${_flag_var}}")
-            string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" ${_flag_var} "${${_flag_var}}")
-            # Clean up multiple spaces
-            string(STRIP "${${_flag_var}}" ${_flag_var})
-        endforeach()
+    # ---- Remove any already‑present sanitizer flags (make idempotent) ----
+    foreach(_flag_var CMAKE_C_FLAGS CMAKE_CXX_FLAGS
+                    CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
+        string(REGEX REPLACE "-fsanitize=[^ ]*" "" ${_flag_var} "${${_flag_var}}")
+        string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" ${_flag_var} "${${_flag_var}}")
+        # Clean up multiple spaces
+        string(STRIP "${${_flag_var}}" ${_flag_var})
+    endforeach()
 
-        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-            set(_common "-g -fno-omit-frame-pointer")
-            set(_san_flags "-fsanitize=${_san_flag_str}")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        set(_common "-g -fno-omit-frame-pointer")
+        set(_san_flags "-fsanitize=${_san_flag_str}")
 
-            # Add to all languages (C, CXX) and linker steps
-            set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_common} ${_san_flags}"   PARENT_SCOPE)
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_common} ${_san_flags}" PARENT_SCOPE)
-            set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_san_flags}"    PARENT_SCOPE)
-            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_san_flags}" PARENT_SCOPE)
-            set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${_san_flags}" PARENT_SCOPE)
+        # Add to all languages (C, CXX) and linker steps
+        set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_common} ${_san_flags}"   PARENT_SCOPE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_common} ${_san_flags}" PARENT_SCOPE)
+        set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_san_flags}"    PARENT_SCOPE)
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_san_flags}" PARENT_SCOPE)
+        set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${_san_flags}" PARENT_SCOPE)
 
-            # Also set them in the cache so sub‑directories see them
-            set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_common} ${_san_flags}"   CACHE STRING "" FORCE)
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_common} ${_san_flags}" CACHE STRING "" FORCE)
-            set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_san_flags}"    CACHE STRING "" FORCE)
-            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_san_flags}" CACHE STRING "" FORCE)
-            set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${_san_flags}" CACHE STRING "" FORCE)
+        # Also set them in the cache so sub‑directories see them
+        set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_common} ${_san_flags}"   CACHE STRING "" FORCE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_common} ${_san_flags}" CACHE STRING "" FORCE)
+        set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_san_flags}"    CACHE STRING "" FORCE)
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_san_flags}" CACHE STRING "" FORCE)
+        set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} ${_san_flags}" CACHE STRING "" FORCE)
 
-        elseif(MSVC)
-            if("address" IN_LIST _san_lower_list)
-                set(_msvc_san "/fsanitize=address")
-                set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_msvc_san}"   PARENT_SCOPE)
-                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_msvc_san}" PARENT_SCOPE)
-                set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_msvc_san}"    PARENT_SCOPE)
-                set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_msvc_san}" PARENT_SCOPE)
+    elseif(MSVC)
+        if("address" IN_LIST _san_lower_list)
+            set(_msvc_san "/fsanitize=address")
+            set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_msvc_san}"   PARENT_SCOPE)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_msvc_san}" PARENT_SCOPE)
+            set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_msvc_san}"    PARENT_SCOPE)
+            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_msvc_san}" PARENT_SCOPE)
 
-                set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_msvc_san}"   CACHE STRING "" FORCE)
-                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_msvc_san}" CACHE STRING "" FORCE)
-                set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_msvc_san}"    CACHE STRING "" FORCE)
-                set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_msvc_san}" CACHE STRING "" FORCE)
-            else()
-                message(WARNING "MSVC only supports AddressSanitizer; ignoring other choices")
-            endif()
+            set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} ${_msvc_san}"   CACHE STRING "" FORCE)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_msvc_san}" CACHE STRING "" FORCE)
+            set(CMAKE_EXE_LINKER_FLAGS    "${CMAKE_EXE_LINKER_FLAGS} ${_msvc_san}"    CACHE STRING "" FORCE)
+            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${_msvc_san}" CACHE STRING "" FORCE)
+        else()
+            message(WARNING "MSVC only supports AddressSanitizer; ignoring other choices")
         endif()
-
-        set(_SANITIZERS_APPLIED_GLOBALLY TRUE CACHE INTERNAL "" FORCE)
     endif()
 
     # ---- Helper for test environment -----------------------------------
