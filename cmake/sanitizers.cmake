@@ -77,8 +77,7 @@ function(enable_sanitizers)
         foreach(_flag_var CMAKE_C_FLAGS CMAKE_CXX_FLAGS
                         CMAKE_EXE_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS CMAKE_MODULE_LINKER_FLAGS)
             string(REGEX REPLACE "-fsanitize=[^ ]*" "" ${_flag_var} "${${_flag_var}}")
-            string(REGEX REPLACE "-g"             "" ${_flag_var} "${${_flag_var}}")
-            string(REGEX REPLACE "-fno-omit-frame-pointer" "" ${_flag_var} "${${_flag_var}}")
+            string(REGEX REPLACE "-g -fno-omit-frame-pointer" "" ${_flag_var} "${${_flag_var}}")
             # Clean up multiple spaces
             string(STRIP "${${_flag_var}}" ${_flag_var})
         endforeach()
