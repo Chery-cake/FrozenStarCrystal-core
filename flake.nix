@@ -111,6 +111,7 @@
             cmake
             pkgs.ninja
             glibcDev
+
             cleanScript
             buildScript
             compileScript

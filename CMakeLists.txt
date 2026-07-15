@@ -95,13 +95,13 @@ endif()
 # ==============================================================================
 # Custom CMake Modules
 # ==============================================================================
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(INC_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-include(CompilerWarnings)
-include(BuildConfiguration)
-include(CrossCompiling)
-include(AddEngineModule)
-include(sanitizers)
+include(${INC_PATH}/CompilerWarnings.cmake)
+include(${INC_PATH}/BuildConfiguration.cmake)
+include(${INC_PATH}/CrossCompiling.cmake)
+include(${INC_PATH}/AddEngineModule.cmake)
+include(${INC_PATH}/sanitizers.cmake)
 
 # ==============================================================================
 # Dependencies
@@ -179,14 +179,14 @@ target_configure_rpath(${PROJECT_NAME})
 option(ENABLE_TESTS "Add and Compile the project tests" OFF)
 option(FSC_TESTS "Force enable tests" OFF)
 
-if((ENABLE_TESTS AND PROJECT_IS_TOP_LEVEL)OR FSC_TESTS)
+if((ENABLE_TESTS AND PROJECT_IS_TOP_LEVEL) OR FSC_TESTS)
     add_subdirectory(tests)
 endif()
 
 # ==============================================================================
 # Generate .clangd Configuration
 # ==============================================================================
-include(GenerateClangd)
+include(${INC_PATH}/GenerateClangd.cmake)
 
 # ==============================================================================
 # Installation
