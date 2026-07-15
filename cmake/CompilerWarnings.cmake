@@ -5,13 +5,10 @@
 # NEVER applies global compiler flags - always per-target.
 # ==============================================================================
 
+option(TREAT_WARNINGS_AS_ERRORS "Tread warnings as errors" OFF)
+
 # Function to apply standard warnings to a target
 function(target_set_warnings TARGET_NAME)
-    set(options TREAT_WARNINGS_AS_ERRORS)
-    set(oneValueArgs "")
-    set(multiValueArgs "")
-    cmake_parse_arguments(WARNINGS "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${TARGET_NAME} PRIVATE
             -Wall
@@ -41,7 +38,7 @@ function(target_set_warnings TARGET_NAME)
             )
         endif()
         
-        if(WARNINGS_TREAT_WARNINGS_AS_ERRORS)
+        if(TREAT_WARNINGS_AS_ERRORS)
             target_compile_options(${TARGET_NAME} PRIVATE -Werror)
         endif()
         
@@ -70,14 +67,29 @@ function(target_set_warnings TARGET_NAME)
             /w14928  # illegal copy-initialization
         )
         
-        if(WARNINGS_TREAT_WARNINGS_AS_ERRORS)
+        if(TREAT_WARNINGS_AS_ERRORS)
             target_compile_options(${TARGET_NAME} PRIVATE /WX)
         endif()
     endif()
 endfunction()
 
-# Function to apply relaxed warnings (for third-party code)
 function(target_set_relaxed_warnings TARGET_NAME)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+        target_compile_options(${TARGET_NAME} PRIVATE
+            /W4
+            /wd4251
+        )
+    endif()
+endfunction()
+
+# Function to apply relaxed warnings (for third-party code)
+function(target_set_no_warnings TARGET_NAME)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${TARGET_NAME} PRIVATE
             -w  # Suppress all warnings

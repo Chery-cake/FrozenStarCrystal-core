@@ -28,6 +28,8 @@
 
         llvm = pkgs.llvmPackages_22;
         clang = llvm.libstdcxxClang;
+        llvmTools = llvm.llvm;
+        lld = llvm.lld;
 
         glibcDev = pkgs.glibc.dev;
 
@@ -55,6 +57,13 @@
             cmake -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
               -DENABLE_TESTS="$ENABLE_TESTS" \
               -DSANITIZERS="$SANITIZERS" \
+              -DENABLE_LTO="$ENABLE_LTO" \
+              -DBUILD_SHARED_LIBS="$BUILD_SHARED_LIBS" \
+              -DWARNINGS_LEVEL="$WARNINGS_LEVEL" \
+              -DTREAT_WARNINGS_AS_ERRORS="$TREAT_WARNINGS_AS_ERRORS" \
+              -DCMAKE_CXX_COMPILER_AR="${llvmTools}/bin/llvm-ar" \
+              -DCMAKE_CXX_COMPILER_RANLIB="${llvmTools}/bin/llvm-ranlib" \
+              -DCMAKE_LINKER_TYPE=LLD \
               -B build -G Ninja
           '';
         };
@@ -98,6 +107,7 @@
             pkgs.git
             gcc
             clang
+            lld
             cmake
             pkgs.ninja
             glibcDev
@@ -121,6 +131,10 @@
             BUILD_TYPE = "Debug";
             ENABLE_TESTS = "ON";
             SANITIZERS = "address,undefined";
+            ENABLE_LTO = "ON";
+            BUILD_SHARED_LIBS = "ON";
+            WARNINGS_LEVEL = 2;
+            TREAT_WARNINGS_AS_ERRORS = "OFF";
 
             # Disable fortify hardening only
             NIX_HARDENING_ENABLE = hardeningDisableFortify;
@@ -134,6 +148,10 @@
 
             echo "C compiler:   $CC   ($( $CC   --version | head -n1 ))"
             echo "C++ compiler: $CXX ($( $CXX --version | head -n1 ))"
+
+            echo ""
+
+            echo "${llvmTools}"
 
             settings() {
               while [[ $# -gt 0 ]]; do
@@ -150,9 +168,25 @@
                     export SANITIZERS="$2"
                     shift 2
                     ;;
+                  --lto)
+                    export ENABLE_LTO="$2"
+                    shift 2
+                    ;;
+                  --build-shared-libs)
+                    export BUILD_SHARED_LIBS="$2"
+                    shift 2
+                    ;;
+                  --warnings-level)
+                    export WARNINGS_LEVEL="$2"
+                    shift 2
+                    ;;
+                  --warnings-as-errors)
+                    export TREAT_WARNINGS_AS_ERRORS="$2"
+                    shift 2
+                    ;;
                   *)
                     echo "Unknown option: $1" >&2
-                    echo "Usage: settings [--build-type Release|Debug] [--tests ON|OFF] [--sanitizers address,undefined]" >&2
+                    echo "Usage: settings [--build-type Release|Debug] [--tests ON|OFF] [--sanitizers address,undefined|\"\"] [--lto ON|OFF] [--build-shared-libs ON|OFF] [--warnings-level 0|1|2] [--warnings-as-errors ON|OFF]" >&2
                     return 1
                     ;;
                 esac
@@ -161,6 +195,10 @@
               echo "BUILD_TYPE: $BUILD_TYPE"
               echo "ENABLE_TESTS: $ENABLE_TESTS"
               echo "SANITIZERS: $SANITIZERS"
+              echo "ENABLE_LTO: $ENABLE_LTO"
+              echo "BUILD_SHARED_LIBS: $BUILD_SHARED_LIBS"
+              echo "WARNINGS_LEVEL: $WARNINGS_LEVEL"
+              echo "TREAT_WARNINGS_AS_ERRORS: $TREAT_WARNINGS_AS_ERRORS"
             }
 
             if [ -n "$PROMPT_COMMAND" ]; then
