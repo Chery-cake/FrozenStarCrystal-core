@@ -177,9 +177,9 @@ target_configure_rpath(${PROJECT_NAME})
 # Tests
 # ==============================================================================
 option(ENABLE_TESTS "Add and Compile the project tests" OFF)
-option(FSCc_TESTS "Force enable tests" OFF)
+option(FSC_TESTS "Force enable tests" OFF)
 
-if((ENABLE_TESTS AND PROJECT_IS_TOP_LEVEL)OR FSCc_TESTS)
+if((ENABLE_TESTS AND PROJECT_IS_TOP_LEVEL)OR FSC_TESTS)
     add_subdirectory(tests)
 endif()
 
