@@ -28,12 +28,13 @@ inline bool Manager::createPool(const Pool *tag, size_t num_threads) {
 }
 
 inline bool Manager::removePool(const Pool *tag) {
+    std::unique_lock lock(mutex_);
+
     // First get the pool pointer for the signal
     auto *pool = registry_.get(tag);
     if (pool == nullptr) {
         return false;
     }
-    std::unique_lock lock(mutex_);
 
     onPoolRemoved.emit(tag, pool); // notify before actual removal
     return registry_.remove(
@@ -42,11 +43,12 @@ inline bool Manager::removePool(const Pool *tag) {
 
 inline bool Manager::split(const Pool *source, const Pool *new_tag,
                            size_t threads_to_extract) {
-    auto *src_pool = getPool(source);
+    std::unique_lock lock(mutex_);
+
+    ThreadPool *src_pool = registry_.get(source);
     if (src_pool == nullptr || src_pool->size() <= threads_to_extract) {
         return false;
     }
-    std::unique_lock lock(mutex_);
 
     size_t old_size = src_pool->size();
     // Reduce source pool – this emits the resized signal via resizePool()
@@ -58,16 +60,17 @@ inline bool Manager::split(const Pool *source, const Pool *new_tag,
     return createPool(new_tag, threads_to_extract);
 }
 
-inline ThreadPool *Manager::getPool(const Pool *tag) {
-    return registry_.get(tag);
+inline std::weak_ptr<ThreadPool> Manager::getPool(const Pool *tag) {
+    return {registry_.getStored(tag)};
 }
 
 inline bool Manager::resizePool(const Pool *tag, size_t new_size) {
+    std::unique_lock lock(mutex_);
+
     auto *pool = registry_.get(tag);
     if (pool == nullptr || pool->size() == new_size || new_size == 0) {
         return false;
     }
-    std::unique_lock lock(mutex_);
 
     size_t old_size = pool->size();
     pool->resize(new_size);
