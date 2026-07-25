@@ -201,22 +201,6 @@
               echo "WARNINGS_LEVEL: $WARNINGS_LEVEL"
               echo "TREAT_WARNINGS_AS_ERRORS: $TREAT_WARNINGS_AS_ERRORS"
             }
-
-            if [ -n "$PROMPT_COMMAND" ]; then
-              _NIX_DEV_ORIG_PROMPT_COMMAND="$PROMPT_COMMAND"
-              PROMPT_COMMAND='__nix_dev_prompt'
-              __nix_dev_prompt() {
-              # run the original command that sets PS1
-              eval "$_NIX_DEV_ORIG_PROMPT_COMMAND"
-              # then replace user/host just before the prompt is displayed
-              PS1="$(echo "$PS1" | sed 's/\\u@\\h/nix-shell/; s/\\u/nix-shell/')"
-            }
-            else
-              if [ -z "$__NIX_DEV_ORIG_PS1" ]; then
-                export __NIX_DEV_ORIG_PS1="$PS1"
-              fi
-                PS1="$(echo "$__NIX_DEV_ORIG_PS1" | sed 's/\\u@\\h/nix-shell/; s/\\u/nix-shell/')"
-            fi
           '';
         };
       }
