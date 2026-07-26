@@ -94,7 +94,7 @@
                 --warnings-as-errors)  new[TREAT_WARNINGS_AS_ERRORS]="$2"; shift 2 ;;
                 *)
                   echo "Unknown option: $1" >&2
-                  echo "Usage: settings [--build-type Release|Debug] [--tests ON|OFF] ..." >&2
+                  echo "Usage: settings [--build-type Release|Debug] [--tests ON|OFF] [--sanitizers address,undefined|\"\"] [--lto ON|OFF] [--build-shared-libs ON|OFF] [--warnings-level 0|1|2] [--warnings-as-errors ON|OFF]" >&2
                   exit 1
                   ;;
               esac
