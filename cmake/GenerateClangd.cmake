@@ -1,7 +1,9 @@
 # GenerateClangd.cmake
 # Generates a .clangd configuration file for the project
 
-set(CLANGD_CONTENT "# File generated automatically
+function(generateClangd)
+
+  set(CLANGD_CONTENT "# File generated automatically
 CompileFlags:
   CompilationDatabase: ${CMAKE_BINARY_DIR}
 
@@ -38,5 +40,7 @@ Completion:
   HeaderInsertion: Never
 ")
     
-file(WRITE ${CMAKE_SOURCE_DIR}/.clangd "${CLANGD_CONTENT}")
-message(STATUS "Generated .clangd configuration file")
+  file(WRITE ${CMAKE_SOURCE_DIR}/.clangd "${CLANGD_CONTENT}")
+  message(STATUS "Generated .clangd configuration file")
+
+endfunction()

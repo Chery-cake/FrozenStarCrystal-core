@@ -102,7 +102,7 @@ include(${INC_PATH}/BuildConfiguration.cmake)
 include(${INC_PATH}/CrossCompiling.cmake)
 include(${INC_PATH}/AddEngineModule.cmake)
 include(${INC_PATH}/sanitizers.cmake)
-
+include(${INC_PATH}/GenerateClangd.cmake)
 
 # ==============================================================================
 # Dependencies
@@ -200,7 +200,7 @@ if(PROJECT_IS_TOP_LEVEL)
     # ==============================================================================
     # Generate .clangd Configuration
     # ==============================================================================
-    include(${INC_PATH}/GenerateClangd.cmake)
+    generateClangd()
 
     # ==============================================================================
     # Debug Output
