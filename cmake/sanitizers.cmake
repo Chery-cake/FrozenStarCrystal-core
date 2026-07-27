@@ -71,7 +71,7 @@ function(_generate_sanitizer_defaults TARGET_NAME)
     endif()
 endfunction()
 
-function(enable_sanitizers)
+function(target_enable_sanitizers TARGET)
     if(NOT SANITIZERS)
         message(WARNING "No sanitizer enabled \n Example add: -DSANITIZERS=\"address,undefined\"")
         return()
@@ -119,16 +119,16 @@ function(enable_sanitizers)
     set(ENABLED_SANITIZERS "${_san_lower_list}" CACHE INTERNAL "Sanitizers active in this build")
 
     string(REPLACE ";" "," _san_flag_str "${_san_flag_list}")
-    target_compile_options(${PROJECT_NAME} PRIVATE
+    target_compile_options(${TARGET} PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-g -fno-omit-frame-pointer -fsanitize=${_san_flag_str}>
         $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
     )
-    target_link_options(${PROJECT_NAME} PRIVATE
+    target_link_options(${TARGET} PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
         $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
     )
 
-    _generate_sanitizer_defaults(${PROJECT_NAME})
+    _generate_sanitizer_defaults(${TARGET})
 
     # Propagate suppression files into ASAN_OPTIONS / LSAN_OPTIONS for CTest.
     set(_target_env "")
@@ -146,13 +146,13 @@ function(enable_sanitizers)
         list(APPEND _target_env "UBSAN_OPTIONS=print_stacktrace=1")
     endif()
     if(_target_env)
-        set_target_properties(${PROJECT_NAME} PROPERTIES ENVIRONMENT "${_target_env}")
+        set_target_properties(${TARGET} PROPERTIES ENVIRONMENT "${_target_env}")
     endif()
 
-    message(STATUS "Sanitizers enabled ${_san_lower_list} on project ${PROJECT_NAME}")
+    message(STATUS "Sanitizers enabled ${_san_lower_list} on project ${TARGET}")
 endfunction()
 
-function(enable_sanitizers_test)
+function(enable_sanitizers_test_target TARGET_NAME TARGET_EXE)
     if(NOT SANITIZERS)
         message(WARNING "No sanitizer enabled \n Example add: -DSANITIZERS=\"address,undefined\"")
         return()  # nothing to do
@@ -202,16 +202,16 @@ function(enable_sanitizers_test)
     set(ENABLED_SANITIZERS "${_san_lower_list}" CACHE INTERNAL "Sanitizers active in this build")
 
     string(REPLACE ";" "," _san_flag_str "${_san_flag_list}")
-    target_compile_options(${TEST_EXE} PRIVATE
+    target_compile_options(${TARGET_EXE} PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
         $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
     )
-    target_link_options(${TEST_EXE} PRIVATE
+    target_link_options(${TARGET_EXE} PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fsanitize=${_san_flag_str}>
         $<$<CXX_COMPILER_ID:MSVC>:/fsanitize=${_san_flag_str}>
     )
 
-    _generate_sanitizer_defaults(${TEST_EXE})
+    _generate_sanitizer_defaults(${TARGET_EXE})
 
     # Propagate suppression files into ASAN_OPTIONS / LSAN_OPTIONS for CTest.
     set(_test_env "")
@@ -229,8 +229,8 @@ function(enable_sanitizers_test)
         list(APPEND _test_env "UBSAN_OPTIONS=print_stacktrace=1")
     endif()
     if(_test_env)
-        set_tests_properties(${TEST_NAME} PROPERTIES ENVIRONMENT "${_test_env}")
+        set_tests_properties(${TARGET} PROPERTIES ENVIRONMENT "${_test_env}")
     endif()
 
-    message(STATUS "Sanitizers enabled ${_san_lower_list} on test ${TEST_NAME}")
+    message(STATUS "Sanitizers enabled ${_san_lower_list} on test ${TARGET}")
 endfunction()

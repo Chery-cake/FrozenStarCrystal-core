@@ -9,10 +9,10 @@
 # ==============================================================================
 # Function to configure Debug build settings for a target
 # ==============================================================================
-function(target_configure_debug)
+function(target_configure_debug TARGET)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         # Debug-specific compile options
-        target_compile_options(${PROJECT_NAME} PRIVATE
+        target_compile_options(${TARGET} PRIVATE
             $<$<CONFIG:Debug>:
                 -g3                     # Maximum debug information
                 -O0                     # No optimization
@@ -23,7 +23,7 @@ function(target_configure_debug)
         )
 
         # Debug definitions
-        target_compile_definitions(${PROJECT_NAME} PRIVATE
+        target_compile_definitions(${TARGET} PRIVATE
             $<$<CONFIG:Debug>:
                 DEBUG
                 _DEBUG
@@ -31,7 +31,7 @@ function(target_configure_debug)
             >
         )
     elseif(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE
+        target_compile_options(${TARGET} PRIVATE
             $<$<CONFIG:Debug>:
                 /Zi         # Debug information
                 /Od         # No optimization
@@ -41,7 +41,7 @@ function(target_configure_debug)
             >
         )
 
-        target_compile_definitions(${PROJECT_NAME} PRIVATE
+        target_compile_definitions(${TARGET} PRIVATE
             $<$<CONFIG:Debug>:
                 DEBUG
                 _DEBUG
@@ -54,10 +54,10 @@ endfunction()
 # ==============================================================================
 # Function to configure Release build settings for a target
 # ==============================================================================
-function(target_configure_release)
+function(target_configure_release TARGET)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         # Release-specific compile options - maximum optimization
-        target_compile_options(${PROJECT_NAME} PRIVATE
+        target_compile_options(${TARGET} PRIVATE
             $<$<CONFIG:Release>:
                 -O3                     # Maximum optimization
                 -funroll-loops          # Unroll loops
@@ -69,7 +69,7 @@ function(target_configure_release)
         )
 
         # Release definitions
-        target_compile_definitions(${PROJECT_NAME} PRIVATE
+        target_compile_definitions(${TARGET} PRIVATE
             $<$<CONFIG:Release>:
                 NDEBUG
                 ENGINE_RELEASE
@@ -78,13 +78,13 @@ function(target_configure_release)
 
         # Linker options for Release
         if(APPLE)
-            target_link_options(${PROJECT_NAME} PRIVATE
+            target_link_options(${TARGET} PRIVATE
                 $<$<CONFIG:Release>:
                     -Wl,-dead_strip         # Remove unused code (Apple ld)
                 >
             )
         else()
-            target_link_options(${PROJECT_NAME} PRIVATE
+            target_link_options(${TARGET} PRIVATE
                 $<$<CONFIG:Release>:
                     -Wl,--gc-sections       # Remove unused sections
                     -Wl,--strip-all         # Strip all symbols
@@ -93,7 +93,7 @@ function(target_configure_release)
             )
         endif()
     elseif(MSVC)
-        target_compile_options(${PROJECT_NAME} PRIVATE
+        target_compile_options(${TARGET} PRIVATE
             $<$<CONFIG:Release>:
                 /O2         # Maximum optimization
                 /Ob2        # Inline expansion
@@ -104,14 +104,14 @@ function(target_configure_release)
             >
         )
 
-        target_compile_definitions(${PROJECT_NAME} PRIVATE
+        target_compile_definitions(${TARGET} PRIVATE
             $<$<CONFIG:Release>:
                 NDEBUG
                 ENGINE_RELEASE
             >
         )
 
-        target_link_options(${PROJECT_NAME} PRIVATE
+        target_link_options(${TARGET} PRIVATE
             $<$<CONFIG:Release>:
                 /LTCG       # Link-time code generation
                 /OPT:REF    # Remove unreferenced code
@@ -124,48 +124,48 @@ endfunction()
 # ==============================================================================
 # Function to enable Link-Time Optimization (LTO) for Release builds
 # ==============================================================================
-function(target_enable_lto)
+function(target_enable_lto TARGET)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT lto_supported OUTPUT lto_error)
 
     if(lto_supported)
-        set_target_properties(${PROJECT_NAME} PROPERTIES
+        set_target_properties(${TARGET} PROPERTIES
             INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
         )
-        message(STATUS "LTO enabled for ${PROJECT_NAME} (Release builds)")
+        message(STATUS "LTO enabled for ${TARGET}")
     else()
-        message(WARNING "LTO not supported for ${PROJECT_NAME}: ${lto_error}")
+        message(WARNING "LTO not supported for ${TARGET}: ${lto_error}")
     endif()
 endfunction()
 
 # ==============================================================================
 # Function to apply all build configurations to a target
 # ==============================================================================
-function(configure_build)
+function(target_configure_build TARGET)
 
     if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
         # Apply Debug configuration
-        target_configure_debug()
+        target_configure_debug(${TARGET})
     else()
         # Apply Release configuration
-        target_configure_release()
+        target_configure_release(${TARGET})
     endif()
 
     # Enable LTO if requested by the target AND the global option is enabled
     if(ENABLE_LTO)
-        target_enable_lto()
+        target_enable_lto(${TARGET})
     endif()
 
     if(SANITIZERS)
-        enable_sanitizers()
+        target_enable_sanitizers(${TARGET})
     endif()
 
     if(WARNINGS_LEVEL EQUAL 0)
-        target_set_no_warnings(${PROJECT_NAME})
+        target_set_no_warnings(${TARGET})
     elseif(WARNINGS_LEVEL EQUAL 1)
-        target_set_relaxed_warnings(${PROJECT_NAME})
+        target_set_relaxed_warnings(${TARGET})
     elseif(WARNINGS_LEVEL EQUAL 2)
-        target_set_warnings(${PROJECT_NAME})
+        target_set_warnings(${TARGET})
     else()
         message(WARNING "Warning level of ${WARNINGS_LEVEL} doesn't exist")
     endif()

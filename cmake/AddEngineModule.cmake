@@ -1,6 +1,6 @@
 # cmake/AddEngineModule.cmake
 
-function(create_export TARGET_NAME)
+function(target_create_export TARGET_NAME)
     # optional MODULES parameter, to pass module files of the target
     cmake_parse_arguments(ARG "" "" "MODULES" ${ARGN})
 

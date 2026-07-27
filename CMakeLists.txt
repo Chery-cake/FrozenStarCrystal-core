@@ -103,6 +103,7 @@ include(${INC_PATH}/CrossCompiling.cmake)
 include(${INC_PATH}/AddEngineModule.cmake)
 include(${INC_PATH}/sanitizers.cmake)
 
+
 # ==============================================================================
 # Dependencies
 # ==============================================================================
@@ -162,12 +163,12 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     $<$<CONFIG:Debug>:ENGINE_DEBUG>
 )
 
-create_export(${PROJECT_NAME} MODULES ${MODULES_FILES})
+target_create_export(${PROJECT_NAME} MODULES ${MODULES_FILES})
 
 # ==============================================================================
 # Apply Build Configuration
 # ==============================================================================
-configure_build()
+target_configure_build(${PROJECT_NAME})
 
 # Apply platform-specific configuration
 target_configure_platform(${PROJECT_NAME})
@@ -184,11 +185,6 @@ if((ENABLE_TESTS AND PROJECT_IS_TOP_LEVEL) OR FSC_TESTS)
 endif()
 
 # ==============================================================================
-# Generate .clangd Configuration
-# ==============================================================================
-include(${INC_PATH}/GenerateClangd.cmake)
-
-# ==============================================================================
 # Installation
 # ==============================================================================
 install(TARGETS ${PROJECT_NAME}
@@ -199,26 +195,36 @@ install(TARGETS ${PROJECT_NAME}
 
 install(DIRECTORY ${OUTPUT_DIR}/assets DESTINATION share/engine)
 
-# ==============================================================================
-# Debug Output
-# ==============================================================================
-message(STATUS "")
-message(STATUS "========================================")
-message(STATUS " Modular C++ Engine v${PROJECT_VERSION}")
-message(STATUS "========================================")
-message(STATUS " Build Type: ${CMAKE_BUILD_TYPE}")
-message(STATUS " Build Shared Libs: ${BUILD_SHARED_LIBS}")
-message(STATUS " C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS " C++ Compiler Standard: ${CMAKE_CXX_COMPILER_ID}")
-message(STATUS " C Standard: ${CMAKE_C_STANDARD}")
-message(STATUS " C Compiler Standard: ${CMAKE_C_COMPILER_ID}")
-message(STATUS " Output: ${OUTPUT_DIR}")
-message(STATUS " Runtime:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-message(STATUS " Library: ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
-message(STATUS "========================================")
+if(PROJECT_IS_TOP_LEVEL)
 
-# Print build configuration summary
-print_build_configuration()
+    # ==============================================================================
+    # Generate .clangd Configuration
+    # ==============================================================================
+    include(${INC_PATH}/GenerateClangd.cmake)
 
-# Print cross-compilation info if applicable
-print_cross_compilation_info()
+    # ==============================================================================
+    # Debug Output
+    # ==============================================================================
+
+    message(STATUS "")
+    message(STATUS "========================================")
+    message(STATUS " Modular C++ Engine v${PROJECT_VERSION}")
+    message(STATUS "========================================")
+    message(STATUS " Build Type: ${CMAKE_BUILD_TYPE}")
+    message(STATUS " Build Shared Libs: ${BUILD_SHARED_LIBS}")
+    message(STATUS " C++ Standard: ${CMAKE_CXX_STANDARD}")
+    message(STATUS " C++ Compiler Standard: ${CMAKE_CXX_COMPILER_ID}")
+    message(STATUS " C Standard: ${CMAKE_C_STANDARD}")
+    message(STATUS " C Compiler Standard: ${CMAKE_C_COMPILER_ID}")
+    message(STATUS " Output: ${OUTPUT_DIR}")
+    message(STATUS " Runtime:  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    message(STATUS " Library: ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+    message(STATUS "========================================")
+
+    # Print build configuration summary
+    print_build_configuration()
+
+    # Print cross-compilation info if applicable
+    print_cross_compilation_info()
+
+endif()
