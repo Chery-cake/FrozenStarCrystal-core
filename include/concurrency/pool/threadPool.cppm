@@ -26,7 +26,7 @@ private:
   std::unique_ptr<queues::TaskQueue> queue_;
   std::vector<std::jthread> threads_;
 
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
 
 public:
   ThreadPool(const Pool &pool, size_t threads = 0);
@@ -51,7 +51,10 @@ public:
   }
 
   void resize(size_t new_size);
-  [[nodiscard]] size_t size() const noexcept { return threads_.size(); }
+  [[nodiscard]] size_t size() const noexcept {
+    std::unique_lock lock(mutex_);
+    return threads_.size();
+  }
 
   [[nodiscard]] queues::TaskQueue *queue() { return queue_.get(); }
   [[nodiscard]] const queues::TaskQueue *queue() const { return queue_.get(); }

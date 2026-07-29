@@ -9,11 +9,15 @@ import resource;
 import signals;
 import :threadPool;
 
-export namespace concurrency::pool {
+namespace concurrency::pool {
 
 using PoolRegistry =
     resource::Registry<Pool, ThreadPool,
                        resource::SharedPtrPolicy<Pool, ThreadPool>>;
+
+} // namespace concurrency::pool
+
+export namespace concurrency::pool {
 
 using PoolSignal = signals::Signals<void(const Pool *, ThreadPool *)>;
 using ResizeSignal = signals::Signals<void(const Pool *, size_t, size_t)>;
@@ -25,6 +29,11 @@ class FROZENSTARCRYSTAL_CORE_API Manager {
     std::recursive_mutex mutex_;
 
   public:
+    Manager(const Manager &) = delete;
+    Manager &operator=(const Manager &) = delete;
+    Manager(Manager &&) = delete;
+    Manager &operator=(Manager &&) = delete;
+
     // Signal objects – public so listeners can connect
     PoolSignal onPoolAdded;
     PoolSignal onPoolRemoved;
