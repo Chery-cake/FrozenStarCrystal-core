@@ -15,7 +15,7 @@ endif()
 # ==============================================================================
 
 if(NOT DEFINED SANITIZER_SUPPRESSION_DIR)
-    set(SANITIZER_SUPPRESSION_DIR "${CMAKE_SOURCE_DIR}/cmake/sanitizers" CACHE FILEPATH
+    set(SANITIZER_SUPPRESSION_DIR "${CMAKE_SOURCE_DIR}/sanitizers" CACHE FILEPATH
         "Directory containing sanitizer suppression files")
 endif()
 if(NOT DEFINED ASAN_SUPPRESSION_FILE)
