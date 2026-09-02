@@ -66,6 +66,7 @@
             cmake
             pkgs.ninja
             glibcDev
+            llvmTools
           ];
 
           env = {
@@ -81,13 +82,7 @@
 
             CXX_MODULES_JSON = "${gccUnwrapped}/lib/libstdc++.modules.json";
 
-            BUILD_TYPE = "Debug";
-            ENABLE_TESTS = "ON";
-            SANITIZERS = "address,undefined";
-            ENABLE_LTO = "ON";
-            BUILD_SHARED_LIBS = "ON";
-            WARNINGS_LEVEL = 2;
-            TREAT_WARNINGS_AS_ERRORS = "OFF";
+            USE_LLVM_LTO = "1";
 
             # Disable fortify hardening only
             NIX_HARDENING_ENABLE = hardeningDisableFortify;
