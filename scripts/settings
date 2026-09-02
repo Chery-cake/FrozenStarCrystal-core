@@ -62,9 +62,8 @@ done
 # Write the config file
 true > "$CONFIG_FILE"
 for var in BUILD_SYSTEM BUILD_TYPE ENABLE_TESTS SANITIZERS ENABLE_LTO BUILD_SHARED_LIBS \
-            WARNINGS_LEVEL TREAT_WARNINGS_AS_ERRORS API APP_NAME \
-            APP_VERSION_MAJOR APP_VERSION_MINOR APP_VERSION_PATCH; do
-    echo "$var=${!var}" >> "$CONFIG_FILE"
+            WARNINGS_LEVEL TREAT_WARNINGS_AS_ERRORS; do
+    echo "export $var=${!var}" >> "$CONFIG_FILE"
 done
 
 if [ $initial_args -ne 0 ]; then
