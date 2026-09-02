@@ -23,6 +23,7 @@ ENABLE_LTO="ON"
 BUILD_SHARED_LIBS="ON"
 WARNINGS_LEVEL=2
 TREAT_WARNINGS_AS_ERRORS="OFF"
+CMAKE_EXTRA_FLAGS=""
 EOF
     echo "Created default config at $CONFIG_FILE"
 fi
@@ -41,9 +42,10 @@ while [[ $# -gt 0 ]]; do
     --build-shared-libs)   new[BUILD_SHARED_LIBS]="$2"; shift 2 ;;
     --warnings-level)      new[WARNINGS_LEVEL]="$2"; shift 2 ;;
     --warnings-as-errors)  new[TREAT_WARNINGS_AS_ERRORS]="$2"; shift 2 ;;
+    --cmake-extra-flags)  new[CMAKE_EXTRA_FLAGS]="$2"; shift 2 ;;
     *)
         echo "Unknown option: $1" >&2
-        echo "Usage: settings [--build-system Ninja] [--build-type Release|Debug] [--tests ON|OFF] [--sanitizers address,undefined|\"\"] [--lto ON|OFF] [--build-shared-libs ON|OFF] [--warnings-level 0|1|2] [--warnings-as-errors ON|OFF]" >&2
+        echo "Usage: settings [--build-system Ninja] [--build-type Release|Debug] [--tests ON|OFF] [--sanitizers address,undefined|\"\"] [--lto ON|OFF] [--build-shared-libs ON|OFF] [--warnings-level 0|1|2] [--warnings-as-errors ON|OFF] [--cmake-extra-flags \"\"]" >&2
         exit 1
         ;;
     esac
@@ -62,8 +64,8 @@ done
 # Write the config file
 true > "$CONFIG_FILE"
 for var in BUILD_SYSTEM BUILD_TYPE ENABLE_TESTS SANITIZERS ENABLE_LTO BUILD_SHARED_LIBS \
-            WARNINGS_LEVEL TREAT_WARNINGS_AS_ERRORS; do
-    echo "export $var=${!var}" >> "$CONFIG_FILE"
+            WARNINGS_LEVEL TREAT_WARNINGS_AS_ERRORS CMAKE_EXTRA_FLAGS; do
+    printf "export %s='%s'\n" "$var" "${!var}" >> "$CONFIG_FILE"
 done
 
 if [ $initial_args -ne 0 ]; then
@@ -81,4 +83,5 @@ echo "  ENABLE_LTO               = $ENABLE_LTO"
 echo "  BUILD_SHARED_LIBS        = $BUILD_SHARED_LIBS"
 echo "  WARNINGS_LEVEL           = $WARNINGS_LEVEL"
 echo "  TREAT_WARNINGS_AS_ERRORS = $TREAT_WARNINGS_AS_ERRORS"
+echo "  CMAKE_EXTRA_FLAGS        = $CMAKE_EXTRA_FLAGS"
 

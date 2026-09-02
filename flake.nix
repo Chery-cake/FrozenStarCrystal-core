@@ -54,6 +54,13 @@
 
         # Hardening: disable only "fortify" (keep everything else that nixpkgs enables)
         hardeningDisableFortify = "stackprotector pie pic strictoverflow format relro bindnow";
+
+        # Extra CMake flags for this environment (Clang + LTO)
+        extraFlags = builtins.concatStringsSep " " [
+          "-DCMAKE_CXX_COMPILER_AR=${llvmTools}/bin/llvm-ar"
+          "-DCMAKE_CXX_COMPILER_RANLIB=${llvmTools}/bin/llvm-ranlib"
+          "-DCMAKE_LINKER_TYPE=LLD"
+        ];
       in
       {
         devShells.default = pkgs.mkShell {
@@ -96,7 +103,7 @@
             echo "C compiler:   $CC   ($( $CC   --version | head -n1 ))"
             echo "C++ compiler: $CXX ($( $CXX --version | head -n1 ))"
 
-            settings
+            settings --cmake-extra-flags "${extraFlags}"
           '';
         };
       }

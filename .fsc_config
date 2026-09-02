@@ -1,8 +1,9 @@
-export BUILD_SYSTEM=Ninja
-export BUILD_TYPE=Debug
-export ENABLE_TESTS=ON
-export SANITIZERS=address,undefined
-export ENABLE_LTO=ON
-export BUILD_SHARED_LIBS=ON
-export WARNINGS_LEVEL=2
-export TREAT_WARNINGS_AS_ERRORS=OFF
+export BUILD_SYSTEM='Ninja'
+export BUILD_TYPE='Debug'
+export ENABLE_TESTS='ON'
+export SANITIZERS='address,undefined'
+export ENABLE_LTO='ON'
+export BUILD_SHARED_LIBS='ON'
+export WARNINGS_LEVEL='2'
+export TREAT_WARNINGS_AS_ERRORS='OFF'
+export CMAKE_EXTRA_FLAGS='-DCMAKE_CXX_COMPILER_AR=/nix/store/3igfa0rikab6fg29wznplgzh1mp71s7v-llvm-22.1.5/bin/llvm-ar -DCMAKE_CXX_COMPILER_RANLIB=/nix/store/3igfa0rikab6fg29wznplgzh1mp71s7v-llvm-22.1.5/bin/llvm-ranlib -DCMAKE_LINKER_TYPE=LLD'
