@@ -274,20 +274,37 @@ void test_initial_suspend_never() {
 int main() {
   std::println("=== Concurrency Coroutines and Scheduler Tests ===");
 
-  test_void_always();
-  test_value_always();
+  static auto tests = [](std::thread::id id) {
+    std::println("Started id: {}", id);
 
-  test_void_never();
-  test_value_never();
+    test_void_always();
+    test_value_always();
 
-  test_co_await_void_always();
-  test_co_await_value_always();
+    test_void_never();
+    test_value_never();
 
-  test_co_await_void_never();
-  test_co_await_value_never();
+    test_co_await_void_always();
+    test_co_await_value_always();
 
-  test_initial_suspend_always();
-  test_initial_suspend_never();
+    test_co_await_void_never();
+    test_co_await_value_never();
+
+    test_initial_suspend_always();
+    test_initial_suspend_never();
+  };
+
+  std::array<std::jthread, 5> threads;
+
+  static auto ex = []() { tests(std::this_thread::get_id()); };
+
+  for (int i = 0; i < 100; i++) {
+    std::ranges::for_each(threads,
+                          [](std::jthread &th) { th = std::jthread(ex); });
+
+    std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
+  }
+
+  ex();
 
   std::println("\n{}/{} tests passed", tests_passed, tests_run);
   return (tests_passed == tests_run) ? 0 : 1;

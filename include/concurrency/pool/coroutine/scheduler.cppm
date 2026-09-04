@@ -9,8 +9,8 @@ import concurrency.queues;
 import concurrency.pool.coroutine.policy;
 
 import :task;
-import :task_void;
 import :state;
+import :structs;
 
 export namespace concurrency::pool::coroutine {
 
@@ -36,8 +36,25 @@ public:
   };
 
   void await_suspend(std::coroutine_handle<> h) {
-    queue_.push([h]() mutable { h.resume(); });
-  };
+    // Capture the state of the coroutine that is about to suspend.
+    auto state = current_state;
+
+    if (state) {
+      std::lock_guard lock(state->mtx);
+      state->scheduler_queue = &queue_;
+    }
+
+    queue_.push([h, state, this]() mutable {
+      h.resume();
+
+      if (h.done()) {
+        if (state) {
+          state->mark_completed();
+        }
+        schedule_continuation(state, &queue_);
+      }
+    });
+  }
 
   void await_resume() noexcept {};
 };
