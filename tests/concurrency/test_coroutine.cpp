@@ -274,9 +274,7 @@ void test_initial_suspend_never() {
 int main() {
   std::println("=== Concurrency Coroutines and Scheduler Tests ===");
 
-  static auto tests = [](std::thread::id id) {
-    std::println("Started id: {}", id);
-
+  static auto tests = []() {
     test_void_always();
     test_value_always();
 
@@ -295,17 +293,19 @@ int main() {
 
   std::array<std::jthread, 5> threads;
 
-  static auto ex = []() { tests(std::this_thread::get_id()); };
+  static auto ex = []() {
+    std::println("Started id: {}", std::this_thread::get_id());
 
-  for (int i = 0; i < 100; i++) {
-    std::ranges::for_each(threads,
-                          [](std::jthread &th) { th = std::jthread(ex); });
+    std::ranges::for_each(std::views::iota(0, 100), [](uint32_t) { tests(); });
+  };
 
-    std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
-  }
+  std::ranges::for_each(threads,
+                        [](std::jthread &th) { th = std::jthread(ex); });
+
+  std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
   ex();
 
-  std::println("\n{}/{} tests passed", tests_passed, tests_run);
+  std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;
 }

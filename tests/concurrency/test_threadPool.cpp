@@ -76,9 +76,27 @@ void test_submit() {
 int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
-  test_create();
-  test_submit();
+  static auto tests = []() {
+    std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {
+      test_create();
+      test_submit();
+    });
+  };
 
-  std::println("\n{}/{} tests passed", tests_passed, tests_run);
+  static auto ex = []() {
+    std::println("Started id: {}", std::this_thread::get_id());
+    tests();
+  };
+
+  std::array<std::jthread, 5> threads;
+
+  std::ranges::for_each(threads,
+                        [](std::jthread &th) { th = std::jthread(ex); });
+
+  std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
+
+  ex();
+
+  std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;
 }

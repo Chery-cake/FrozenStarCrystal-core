@@ -55,8 +55,25 @@ void test_fifo() {
 int main() {
   std::println("=== Concurrency queues Tests ===");
 
-  test_fifo();
+  static auto tests = []() {
+    std::ranges::for_each(std::views::iota(0, 50),
+                          [](uint32_t) { test_fifo(); });
+  };
 
-  std::println("\n{}/{} tests passed", tests_passed, tests_run);
+  static auto ex = []() {
+    std::println("Started id: {}", std::this_thread::get_id());
+    tests();
+  };
+
+  std::array<std::jthread, 5> threads;
+
+  std::ranges::for_each(threads,
+                        [](std::jthread &th) { th = std::jthread(ex); });
+
+  std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
+
+  ex();
+
+  std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;
 }

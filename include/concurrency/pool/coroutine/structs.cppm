@@ -35,11 +35,8 @@ inline void schedule_continuation(const SharedHandle &state,
 
   queue->push([cont, cont_state, queue]() mutable {
     cont.resume();
-    if (cont.done()) {
-      if (cont_state) {
-        cont_state->mark_completed();
-        schedule_continuation(cont_state, queue);
-      }
+    if (cont_state && cont_state->done) {
+      schedule_continuation(cont_state, queue);
     }
   });
 };
@@ -168,6 +165,11 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
 
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<> awaiting) noexcept {
+
+    if (!handle_) {
+      return std::noop_coroutine();
+    }
+
     auto typed = handle_type::from_address(handle_->handle.address());
     auto &promise = typed.promise();
 

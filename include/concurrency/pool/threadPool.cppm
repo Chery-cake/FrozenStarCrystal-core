@@ -20,13 +20,16 @@ struct FROZENSTARCRYSTAL_CORE_API Pool {
 
 class FROZENSTARCRYSTAL_CORE_API ThreadPool {
 private:
-  static void worker_loop(const std::stop_token &stoken,
-                          queues::TaskQueue &queue);
-
   std::unique_ptr<queues::TaskQueue> queue_;
   std::vector<std::jthread> threads_;
+  std::condition_variable cv_done_;
+  size_t active_tasks_ = 0;
 
-  mutable std::mutex mutex_;
+  mutable std::mutex threads_mutex_;
+  std::mutex tasks_mutex_;
+
+  static void worker_loop(const std::stop_token &stoken,
+                          queues::TaskQueue &queue);
 
 public:
   ThreadPool(const Pool &pool, size_t threads = 0);
@@ -46,13 +49,15 @@ public:
   static coroutine::Scheduler<QP> schedule(queues::TaskQueue *queue) noexcept;
 
   void wait() {
-    while (!queue_->empty()) {
-    }
+    std::unique_lock lock(tasks_mutex_);
+    cv_done_.wait(lock, [&tasks = active_tasks_, &queue = queue_]() {
+      return tasks == 0 && queue->empty();
+    });
   }
 
   void resize(size_t new_size);
   [[nodiscard]] size_t size() const noexcept {
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(threads_mutex_);
     return threads_.size();
   }
 

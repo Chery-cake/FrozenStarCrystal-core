@@ -32,7 +32,7 @@ inline ThreadPool::ThreadPool(const Pool &pool, size_t num_threads) {
 
 inline ThreadPool::~ThreadPool() {
   {
-    std::unique_lock lock(mutex_);
+    std::unique_lock lock(threads_mutex_);
     std::ranges::for_each(threads_, [](std::jthread &t) { t.request_stop(); });
   }
 
@@ -66,7 +66,20 @@ ThreadPool::submit(F &&f, Args &&...args) {
       std::bind(std::forward<F>(f), std::forward<Args>(args)...));
 
   std::future<Ret> fut = task->get_future();
-  queue_->push([task]() { (*task)(); });
+
+  {
+    std::lock_guard lock(threads_mutex_);
+    ++active_tasks_;
+  }
+
+  queue_->push(
+      [task, &mtx = tasks_mutex_, &tasks = active_tasks_, &cv = cv_done_]() {
+        (*task)();
+
+        std::lock_guard lock(mtx);
+        --tasks;
+        cv.notify_all();
+      });
   return fut;
 }
 
@@ -81,7 +94,7 @@ ThreadPool::schedule(queues::TaskQueue *queue) noexcept {
 }
 
 inline void ThreadPool::resize(size_t new_size) {
-  std::unique_lock lock(mutex_);
+  std::unique_lock lock(threads_mutex_);
   size_t current = threads_.size();
 
   if (new_size > current) {

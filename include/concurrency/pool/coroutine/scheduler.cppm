@@ -47,10 +47,7 @@ public:
     queue_.push([h, state, this]() mutable {
       h.resume();
 
-      if (h.done()) {
-        if (state) {
-          state->mark_completed();
-        }
+      if (state && state->done) {
         schedule_continuation(state, &queue_);
       }
     });
