@@ -28,7 +28,9 @@ void test_submit() {
   concurrency::pool::ThreadPool t(p);
 
   auto f = [](int x) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // TODO
+    // decide a better time or operation that could lead to a deadlock
+    std::this_thread::sleep_for(std::chrono::nanoseconds(100));
     return x;
   };
 
@@ -77,7 +79,7 @@ int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
   static auto tests = []() {
-    std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {
+    std::ranges::for_each(std::views::iota(0, 25), [](uint32_t) {
       test_create();
       test_submit();
     });

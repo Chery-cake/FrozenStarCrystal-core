@@ -55,29 +55,39 @@ public:
 
   void start() {
     if (handle_ && !handle_->handle.done()) {
+      auto typed = handle_type::from_address(handle_->handle.address());
+      auto &promise = typed.promise();
+
+      promise.skip_initial_suspend = true;
+
       handle_->handle.resume();
     }
   }
 
   T get() {
-    auto h = std::move(handle_);
-
-    auto typed = handle_type::from_address(h->handle.address());
-    auto &promise = typed.promise();
-
-    if (h->handle.done()) {
-      h->mark_completed();
+    if (!handle_) {
+      // TODO
+      // deal with it
+      // throw or assert
     }
 
-    if (!h->handle.done() && !promise.started) {
+    auto typed = handle_type::from_address(handle_->handle.address());
+    auto &promise = typed.promise();
+
+    if (handle_->handle.done()) {
+      handle_->mark_completed();
+    }
+
+    if (!handle_->handle.done() && !promise.started) {
       promise.started = true;
-      h->handle.resume();
-      if (h->handle.done()) {
-        h->mark_completed();
+      promise.skip_initial_suspend = true;
+      handle_->handle.resume();
+      if (handle_->handle.done()) {
+        handle_->mark_completed();
       }
     }
 
-    h->wait_completion();
+    handle_->wait_completion();
 
     if (promise.exception) {
       std::rethrow_exception(promise.exception);

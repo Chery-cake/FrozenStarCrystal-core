@@ -12,9 +12,15 @@ import :state;
 
 export namespace concurrency::pool::coroutine {
 
+// TODO
+// rework the suspension mechanism to always use symmetric transfer when no
+// queue is available
+//
+// always use symmetric transfer, falling to the scheduller first
+
 inline void schedule_continuation(const SharedHandle &state,
                                   queues::TaskQueue *queue) {
-  if (!state || queue == nullptr) {
+  if (!state) {
     return;
   }
 
@@ -33,12 +39,29 @@ inline void schedule_continuation(const SharedHandle &state,
     state->continuation_state = nullptr;
   }
 
-  queue->push([cont, cont_state, queue]() mutable {
+  // Determine the target queue for resuming the continuation.
+  // Prefer the queue passed from the current coroutine’s scheduler.
+  // Fall back to the continuation’s own scheduler_queue if available.
+  queues::TaskQueue *target_queue = queue;
+  if (target_queue == nullptr && cont_state) {
+    std::lock_guard lock(cont_state->mtx);
+    target_queue = cont_state->scheduler_queue;
+  }
+
+  if (target_queue != nullptr) {
+    target_queue->push([cont, cont_state, target_queue]() mutable {
+      cont.resume();
+      if (cont_state && cont_state->done) {
+        schedule_continuation(cont_state, target_queue);
+      }
+    });
+  } else {
+    // No scheduler queue was used; resume the continuation immediately.
     cont.resume();
     if (cont_state && cont_state->done) {
-      schedule_continuation(cont_state, queue);
+      schedule_continuation(cont_state, nullptr);
     }
-  });
+  }
 };
 
 template <typename T, template <policy::Suspend, typename> class Task,
@@ -61,7 +84,7 @@ struct FROZENSTARCRYSTAL_CORE_API InitialAwaiter {
   promise &p;
   constexpr auto await_ready() const noexcept {
     if constexpr (SP == policy::Suspend::Always) {
-      return false;
+      return p.skip_initial_suspend;
     }
     if constexpr (SP == policy::Suspend::Never) {
       return true;
@@ -78,13 +101,40 @@ template <PromiseType promise> struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   promise &p;
 
   [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
-  void await_suspend(std::coroutine_handle<> /*unused*/) const noexcept {
+
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<> /*unused*/) const noexcept {
     if (p.state) {
       p.state->mark_completed();
-      p.state = nullptr;
+      queues::TaskQueue *queue = p.state->scheduler_queue;
+      if (queue != nullptr) {
+        // Schedule continuation asynchronously
+        schedule_continuation(p.state, queue);
+        p.state = nullptr;
+        return std::noop_coroutine();
+      }
+      // No queue: use symmetric transfer
+      std::coroutine_handle<> cont;
+      std::shared_ptr<CoroutineState> cont_state;
+      {
+        std::lock_guard lock(p.state->mtx);
+        if (p.state->has_awaiter && p.state->continuation) {
+          cont = p.state->continuation;
+          cont_state = p.state->continuation_state;
+          p.state->has_awaiter = false;
+          p.state->continuation = nullptr;
+          p.state->continuation_state = nullptr;
+        }
+      }
+      p.state = nullptr; // release reference
+      if (cont) {
+        return cont; // transfer control to outer coroutine
+      }
+      return std::noop_coroutine();
     }
-    // Remain suspended so the coroutine frame is not destroyed yet.
+    return std::noop_coroutine();
   }
+
   void await_resume() const noexcept {}
 };
 
@@ -95,6 +145,7 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type {
   std::exception_ptr exception;
   std::shared_ptr<CoroutineState> state = nullptr;
   bool started = false;
+  bool skip_initial_suspend = false; // TODO find a way to remove this flag
 
   // Return type of the coroutine
   using task_type = Task<SP, T>;
@@ -126,6 +177,7 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type<void, Task, SP> {
   std::exception_ptr exception;
   std::shared_ptr<CoroutineState> state = nullptr;
   bool started = false;
+  bool skip_initial_suspend = false; // TODO find a way to remove this flag
 
   // Return type of the coroutine
   using task_type = Task<SP, void>;
@@ -182,25 +234,11 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
 
     if (!promise.started) {
       promise.started = true;
+      promise.skip_initial_suspend = true;
       handle_->handle.resume();
-      if (handle_->handle.done()) {
-        handle_->mark_completed();
-        schedule_continuation(handle_, handle_->scheduler_queue);
-        return std::noop_coroutine(); // outer will be resumed via queue
-      }
-      // If inner suspended, outer will be resumed later by scheduler.
-      return std::noop_coroutine();
     }
-    // Inner already started (suspended). Check if it completed in the
-    // meantime.
-    bool already_done = false;
-    {
-      std::lock_guard lock(handle_->mtx);
-      already_done = handle_->done;
-    }
-    if (already_done) {
-      schedule_continuation(handle_, handle_->scheduler_queue);
-    }
+
+    // If inner suspended, outer will be resumed later by scheduler.
     return std::noop_coroutine();
   }
 
@@ -212,21 +250,13 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
     std::exception_ptr exc = p.exception;
 
     if constexpr (!std::is_void_v<T>) {
-      std::optional<T> result;
-      if (p.result) {
-        result = std::move(*p.result);
-      }
-      // Destroy the frame after extracting result
-      handle_->destroy_handle();
-
       if (exc) {
         std::rethrow_exception(exc);
       }
 
-      T value = std::move(*result);
+      T value = std::move(*p.result);
       return value;
     } else {
-      handle_->destroy_handle();
       if (exc) {
         std::rethrow_exception(exc);
       }

@@ -67,19 +67,15 @@ ThreadPool::submit(F &&f, Args &&...args) {
 
   std::future<Ret> fut = task->get_future();
 
-  {
-    std::lock_guard lock(threads_mutex_);
-    ++active_tasks_;
-  }
+  active_tasks_.fetch_add(1, std::memory_order_release);
 
-  queue_->push(
-      [task, &mtx = tasks_mutex_, &tasks = active_tasks_, &cv = cv_done_]() {
-        (*task)();
+  queue_->push([task, &tasks = active_tasks_, &cv = cv_done_]() {
+    (*task)();
 
-        std::lock_guard lock(mtx);
-        --tasks;
-        cv.notify_all();
-      });
+    if (tasks.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      cv.notify_all();
+    }
+  });
   return fut;
 }
 

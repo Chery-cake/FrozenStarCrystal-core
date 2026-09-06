@@ -271,6 +271,142 @@ void test_initial_suspend_never() {
   PASS();
 }
 
+/////////////////////////////////////////////
+
+// --- Nested scheduling with final continuation ---
+concurrency::pool::coroutine::CoroutineTask<
+    concurrency::pool::coroutine::policy::Suspend::Always, bool>
+inner_schedule_and_return(concurrency::pool::ThreadPool &t) {
+  co_await t.schedule();
+  co_return true;
+}
+
+concurrency::pool::coroutine::CoroutineTask<
+    concurrency::pool::coroutine::policy::Suspend::Always, bool>
+outer_awaits_inner(concurrency::pool::ThreadPool &t) {
+  bool result = co_await inner_schedule_and_return(t);
+  co_return result;
+}
+
+void test_nested_schedule_continuation() {
+  TEST("nested schedule continuation");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  auto task = outer_awaits_inner(t);
+  bool result = task.get();
+  assert(result == true);
+
+  // The outer coroutine must have resumed on the pool thread.
+  // We can check indirectly by ensuring the pool worker flag is set
+  // during the outer coroutine's resume. For that we need a modified test
+  // that captures isPoolWorker at the moment of resume. We'll create a
+  // variant that stores that flag in a variable accessible to the test.
+
+  PASS();
+}
+
+//////////////////////////////////////////////
+
+// --- External resume (simulates fence waiter) ---
+concurrency::pool::coroutine::CoroutineTask<
+    concurrency::pool::coroutine::policy::Suspend::Always, bool>
+external_resume_inner(concurrency::pool::ThreadPool &t) {
+  // Schedule onto the pool first
+  co_await t.schedule();
+  // Then await an external event
+  co_await ExternalEventAwaiter{};
+  co_return true;
+}
+
+concurrency::pool::coroutine::CoroutineTask<
+    concurrency::pool::coroutine::policy::Suspend::Always, bool>
+external_resume_outer(concurrency::pool::ThreadPool &t) {
+  bool result = co_await external_resume_inner(t);
+  co_return result;
+}
+
+void test_external_resume_continuation() {
+  TEST("external resume continuation");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  auto task = external_resume_outer(t);
+  bool result = task.get();
+  assert(result == true);
+  PASS();
+}
+
+//////////////////////////////////////////////
+
+// --- Chain of multiple awaits, each scheduling ---
+concurrency::pool::coroutine::CoroutineTask<
+    concurrency::pool::coroutine::policy::Suspend::Always, void>
+chain_step(concurrency::pool::ThreadPool &t, int depth, int &counter) {
+  if (depth > 0) {
+    co_await t.schedule();
+    co_await chain_step(t, depth - 1, counter);
+    counter++;
+  } else {
+    co_return;
+  }
+}
+
+void test_chain_of_awaits() {
+  TEST("chain of awaits");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  int counter = 0;
+  auto task = chain_step(t, 5, counter);
+  task.get();
+
+  assert(counter == 5);
+  PASS();
+}
+
+//////////////////////////////////////////////
+
+// --- Verify correct queue for continuation ---
+// We'll create a coroutine that schedules onto the pool, then awaits an
+// inner coroutine that also schedules. The outer coroutine must resume on
+// the pool. We can capture `isPoolWorker` during the outer resume using a
+// small helper.
+concurrency::pool::coroutine::CoroutineTask<
+    concurrency::pool::coroutine::policy::Suspend::Always, void>
+capture_resume_worker_flag(concurrency::pool::ThreadPool &t,
+                           bool &flag_on_resume) {
+  co_await t.schedule();
+  // When this coroutine resumes after the inner await, we are on the pool.
+  // We can't directly capture the flag here because this code runs before
+  // the inner await. Instead, we'll have the inner coroutine set the flag
+  // before it returns, and the outer coroutine can observe it after co_await.
+  bool inner_result = co_await inner_schedule_and_return(t);
+  // After the inner returns, we are resumed on the pool if the
+  // continuation was scheduled there.
+  flag_on_resume = concurrency::pool::coroutine::isPoolWorker;
+  co_return;
+}
+
+void test_continuation_runs_on_pool() {
+  TEST("continuation runs on pool");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  bool flag_on_resume = false;
+  auto task = capture_resume_worker_flag(t, flag_on_resume);
+  task.get();
+
+  assert(flag_on_resume == true);
+  PASS();
+}
+
+//////////////////////////////////////////////
+
 int main() {
   std::println("=== Concurrency Coroutines and Scheduler Tests ===");
 
@@ -289,22 +425,28 @@ int main() {
 
     test_initial_suspend_always();
     test_initial_suspend_never();
+
+    test_nested_schedule_continuation();
+    test_external_resume_continuation();
+    test_chain_of_awaits();
+    test_continuation_runs_on_pool();
+  };
+
+  static auto ex = [](uint32_t repeats) {
+    std::println("Started id: {}", std::this_thread::get_id());
+
+    std::ranges::for_each(std::views::iota(0U, repeats),
+                          [](uint32_t) { tests(); });
   };
 
   std::array<std::jthread, 5> threads;
 
-  static auto ex = []() {
-    std::println("Started id: {}", std::this_thread::get_id());
-
-    std::ranges::for_each(std::views::iota(0, 100), [](uint32_t) { tests(); });
-  };
-
   std::ranges::for_each(threads,
-                        [](std::jthread &th) { th = std::jthread(ex); });
+                        [](std::jthread &th) { th = std::jthread(ex, 100); });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex();
+  ex(100);
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

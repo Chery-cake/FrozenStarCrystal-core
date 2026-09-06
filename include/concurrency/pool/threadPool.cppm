@@ -23,7 +23,7 @@ private:
   std::unique_ptr<queues::TaskQueue> queue_;
   std::vector<std::jthread> threads_;
   std::condition_variable cv_done_;
-  size_t active_tasks_ = 0;
+  std::atomic<size_t> active_tasks_{0};
 
   mutable std::mutex threads_mutex_;
   std::mutex tasks_mutex_;
@@ -51,12 +51,13 @@ public:
   void wait() {
     std::unique_lock lock(tasks_mutex_);
     cv_done_.wait(lock, [&tasks = active_tasks_, &queue = queue_]() {
-      return tasks == 0 && queue->empty();
+      return tasks.load(std::memory_order_acquire) == 0 && queue->empty();
     });
   }
 
   void resize(size_t new_size);
   [[nodiscard]] size_t size() const noexcept {
+    // TODO fix possible deadlock
     std::unique_lock lock(threads_mutex_);
     return threads_.size();
   }
