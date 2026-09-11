@@ -46,8 +46,12 @@ void test_fifo() {
 
   ss.request_stop();
 
+  assert(queue.try_pop(t, st));
+  t();
+  assert(count == 9);
+
   assert(!queue.try_pop(t, st));
-  assert(count == 7);
+  assert(count == 9);
 
   PASS();
 }

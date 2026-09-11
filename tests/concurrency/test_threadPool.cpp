@@ -75,6 +75,139 @@ void test_submit() {
   PASS();
 }
 
+void test_wait_empty() {
+  TEST("wait empty");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  // Nothing submitted: wait must return immediately.
+  t.wait();
+  t.wait(); // idempotent
+
+  PASS();
+}
+
+void test_wait_for_submit_detach() {
+  TEST("wait for submit_detach");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 4);
+
+  constexpr int kTasks = 64;
+  std::atomic<int> completed{0};
+
+  std::ranges::for_each(std::views::iota(0, kTasks), [&t, &completed](int) {
+    t.submit_detach([&completed] {
+      std::this_thread::sleep_for(std::chrono::microseconds(50));
+      completed.fetch_add(1, std::memory_order_relaxed);
+    });
+  });
+
+  t.wait();
+  assert(completed.load(std::memory_order_relaxed) == kTasks);
+
+  PASS();
+}
+
+void test_wait_with_futures() {
+  TEST("wait with futures");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 4);
+
+  std::atomic<int> sum{0};
+  std::vector<std::future<void>> futs;
+
+  std::ranges::for_each(std::views::iota(0, 32), [&](int i) {
+    futs.push_back(
+        t.submit([&sum, i] { sum.fetch_add(i, std::memory_order_relaxed); }));
+  });
+
+  t.wait();
+  // wait() guarantees the task bodies have executed; we don't need .get().
+  int expected = 0;
+  for (int i = 0; i < 32; ++i)
+    expected += i;
+  assert(sum.load(std::memory_order_relaxed) == expected);
+
+  PASS();
+}
+
+void test_wait_repeated() {
+  TEST("wait repeated");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 4);
+
+  // Tight submit+wait loop. This is the pattern that exposes the
+  // lost-wakeup race between `task_finished` (atomic decrement + notify)
+  // and `wait` (mutex + cv) if the counter is not protected by the mutex.
+  constexpr int kIters = 2000;
+  std::ranges::for_each(std::views::iota(0, kIters), [&](int) {
+    std::atomic<int> ran{0};
+    t.submit_detach([&ran] { ran.fetch_add(1, std::memory_order_relaxed); });
+    t.wait();
+    assert(ran.load(std::memory_order_relaxed) == 1);
+  });
+
+  PASS();
+}
+
+void test_wait_concurrent_submit() {
+  TEST("wait concurrent submit");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 4);
+
+  constexpr int kProducers = 4;
+  constexpr int kPerProducer = 500;
+  std::atomic<int> completed{0};
+
+  std::vector<std::jthread> producers;
+  producers.reserve(kProducers);
+  for (int i = 0; i < kProducers; ++i) {
+    producers.emplace_back([&] {
+      std::ranges::for_each(std::views::iota(0, kPerProducer), [&](int) {
+        t.submit_detach([&completed] {
+          completed.fetch_add(1, std::memory_order_relaxed);
+        });
+      });
+    });
+  }
+
+  for (auto &th : producers)
+    th.join();
+  t.wait();
+
+  assert(completed.load(std::memory_order_relaxed) ==
+         kProducers * kPerProducer);
+
+  PASS();
+}
+
+void test_wait_from_worker_throws() {
+  TEST("wait from worker throws");
+
+  concurrency::pool::Pool p("test");
+  concurrency::pool::ThreadPool t(p, 2);
+
+  std::atomic<bool> threw{false};
+
+  auto fut = t.submit([&t, &threw] {
+    try {
+      t.wait();
+    } catch (const std::logic_error &) {
+      threw.store(true, std::memory_order_relaxed);
+    }
+  });
+  fut.get();
+
+  assert(threw.load(std::memory_order_relaxed));
+
+  PASS();
+}
+
 int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
@@ -82,6 +215,13 @@ int main() {
     std::ranges::for_each(std::views::iota(0, 25), [](uint32_t) {
       test_create();
       test_submit();
+
+      test_wait_empty();
+      test_wait_for_submit_detach();
+      test_wait_with_futures();
+      test_wait_repeated();
+      test_wait_concurrent_submit();
+      test_wait_from_worker_throws();
     });
   };
 

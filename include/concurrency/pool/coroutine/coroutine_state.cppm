@@ -10,45 +10,58 @@ import concurrency.queues;
 
 export namespace concurrency::pool::coroutine {
 
-inline thread_local struct std::shared_ptr<struct CoroutineState>
-    current_state = nullptr;
+enum class AwaiterState : uint8_t {
+  None,        // no awaiter
+  Registering, // awaiter in await_suspend
+  Waiting,     // awaiter suspended
+};
 
-struct FROZENSTARCRYSTAL_CORE_API CoroutineState {
+struct FROZENSTARCRYSTAL_CORE_API CoroutineState
+    : std::enable_shared_from_this<CoroutineState> {
+
   std::coroutine_handle<> handle;
+
+  // continuation coordination
   std::mutex mtx;
-  std::condition_variable cv;
-  bool done = false;
-  bool has_awaiter = false;
+  // TODO
+  // find a way to turn awaiter_state into a atomic, so that state checks can
+  // be lock free, making that only changing the continuation handles will
+  // need a mutex
+  AwaiterState awaiter_state = AwaiterState::None;
   std::coroutine_handle<> continuation = nullptr; // outer coroutine to resume
   std::shared_ptr<CoroutineState> continuation_state =
       nullptr; // state of outer coroutine
-  queues::TaskQueue *scheduler_queue =
-      nullptr; // queue to resume continuation on
+  std::atomic<queues::TaskQueue *> scheduler_queue{
+      nullptr}; // queue to resume continuation on
+
+  std::atomic<bool> executed{false};
 
   explicit CoroutineState(std::coroutine_handle<> h) : handle(h) {}
   ~CoroutineState() {
     if (handle) {
       handle.destroy();
-    }
-  }
-
-  void mark_completed() {
-    std::lock_guard lock(mtx);
-    done = true;
-    cv.notify_all();
-  }
-
-  void wait_completion() {
-    std::unique_lock lock(mtx);
-    cv.wait(lock, [&d = done] { return d; });
-  }
-
-  void destroy_handle() {
-    std::lock_guard lock(mtx);
-    if (handle) {
-      handle.destroy();
       handle = nullptr;
     }
+  }
+
+  void do_resume() {
+    // keep state alive
+    auto self = shared_from_this();
+
+    handle.resume();
+  }
+
+  void mark_executed() {
+    executed.store(true, std::memory_order_release);
+    executed.notify_all();
+  }
+
+  void wait_execution() const {
+    executed.wait(false, std::memory_order_acquire);
+  }
+
+  bool done_executing() const {
+    return executed.load(std::memory_order_acquire);
   }
 };
 

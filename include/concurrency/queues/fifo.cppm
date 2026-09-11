@@ -16,7 +16,9 @@ private:
   std::condition_variable_any cv_;
 
 public:
-  void push(Task t) override {
+  using TaskQueue::push;
+
+  void push(Task t, Priority /*p*/) override { // TODO implement priority
     {
       std::scoped_lock lock(mutex_);
       queue_.push(std::move(t));
@@ -26,8 +28,7 @@ public:
 
   bool try_pop(Task &t, const std::stop_token &stoken) override {
     std::unique_lock lock(mutex_);
-    cv_.wait(lock, stoken, [&queue = queue_] { return !queue.empty(); });
-    if (queue_.empty() || stoken.stop_requested()) {
+    if (!cv_.wait(lock, stoken, [&queue = queue_] { return !queue.empty(); })) {
       return false;
     }
 

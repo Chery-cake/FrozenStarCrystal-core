@@ -28,15 +28,8 @@ private:
   }
 
 public:
-  explicit CoroutineTask(handle_type handle) noexcept
-      : handle_(make_shared_handle(handle)) {
-    // Set the state pointer in the promise for later access.
-    handle.promise().state = handle_;
-    if constexpr (SP == policy::Suspend::Never) {
-      handle.promise().started = true;
-      current_state = handle_;
-    }
-  }
+  explicit CoroutineTask(SharedHandle handle) noexcept
+      : handle_(std::move(handle)) {}
 
   CoroutineTask(const CoroutineTask &) = delete;
   CoroutineTask &operator=(const CoroutineTask &) = delete;
@@ -50,44 +43,30 @@ public:
     return handle_ && handle_->handle;
   }
   [[nodiscard]] bool done() const noexcept {
-    return !valid() || handle_->handle.done();
+    return !valid() || handle_->done_executing();
   }
 
   void start() {
-    if (handle_ && !handle_->handle.done()) {
-      auto typed = handle_type::from_address(handle_->handle.address());
-      auto &promise = typed.promise();
-
-      promise.skip_initial_suspend = true;
-
-      handle_->handle.resume();
+    auto typed = handle_type::from_address(handle_->handle.address());
+    auto &promise = typed.promise();
+    if (!promise.started) {
+      promise.started = true;
+      handle_->do_resume();
     }
   }
 
   T get() {
-    if (!handle_) {
-      // TODO
-      // deal with it
-      // throw or assert
-    }
-
     auto typed = handle_type::from_address(handle_->handle.address());
     auto &promise = typed.promise();
 
-    if (handle_->handle.done()) {
-      handle_->mark_completed();
-    }
-
-    if (!handle_->handle.done() && !promise.started) {
-      promise.started = true;
-      promise.skip_initial_suspend = true;
-      handle_->handle.resume();
-      if (handle_->handle.done()) {
-        handle_->mark_completed();
+    if constexpr (SP == policy::Suspend::Always) {
+      if (!promise.started) {
+        promise.started = true;
+        handle_->do_resume();
       }
     }
 
-    handle_->wait_completion();
+    handle_->wait_execution();
 
     if (promise.exception) {
       std::rethrow_exception(promise.exception);

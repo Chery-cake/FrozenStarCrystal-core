@@ -12,12 +12,6 @@ import :state;
 
 export namespace concurrency::pool::coroutine {
 
-// TODO
-// rework the suspension mechanism to always use symmetric transfer when no
-// queue is available
-//
-// always use symmetric transfer, falling to the scheduller first
-
 inline void schedule_continuation(const SharedHandle &state,
                                   queues::TaskQueue *queue) {
   if (!state) {
@@ -29,12 +23,15 @@ inline void schedule_continuation(const SharedHandle &state,
 
   {
     std::lock_guard lock(state->mtx);
-    if (!state->has_awaiter || !state->continuation) {
+
+    if (state->awaiter_state != AwaiterState::Waiting || !state->continuation) {
       return;
     }
+
     cont = state->continuation;
     cont_state = state->continuation_state;
-    state->has_awaiter = false; // mark that continuation has been taken
+    state->awaiter_state =
+        AwaiterState::None; // mark that continuation has been taken
     state->continuation = nullptr;
     state->continuation_state = nullptr;
   }
@@ -45,22 +42,16 @@ inline void schedule_continuation(const SharedHandle &state,
   queues::TaskQueue *target_queue = queue;
   if (target_queue == nullptr && cont_state) {
     std::lock_guard lock(cont_state->mtx);
-    target_queue = cont_state->scheduler_queue;
+    target_queue = cont_state->scheduler_queue.load(std::memory_order_acquire);
   }
 
   if (target_queue != nullptr) {
-    target_queue->push([cont, cont_state, target_queue]() mutable {
-      cont.resume();
-      if (cont_state && cont_state->done) {
+    target_queue->push([cont_state, target_queue]() mutable {
+      cont_state->do_resume();
+      if (cont_state->done_executing()) {
         schedule_continuation(cont_state, target_queue);
       }
     });
-  } else {
-    // No scheduler queue was used; resume the continuation immediately.
-    cont.resume();
-    if (cont_state && cont_state->done) {
-      schedule_continuation(cont_state, nullptr);
-    }
   }
 };
 
@@ -78,61 +69,57 @@ struct is_promise_type<promise_type<T, Task, SP>> : std::true_type {};
 template <typename T>
 concept PromiseType = is_promise_type<T>::value;
 
-// Initial and final suspend
-template <PromiseType promise, policy::Suspend SP>
-struct FROZENSTARCRYSTAL_CORE_API InitialAwaiter {
-  promise &p;
-  constexpr auto await_ready() const noexcept {
-    if constexpr (SP == policy::Suspend::Always) {
-      return p.skip_initial_suspend;
-    }
-    if constexpr (SP == policy::Suspend::Never) {
-      return true;
-    }
-  }
-  void await_suspend(std::coroutine_handle<> /*unused*/) const noexcept {}
-  void await_resume() const noexcept {
-    p.started = true;
-    current_state = p.state;
-  }
-};
-
+// Final suspend
 template <PromiseType promise> struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   promise &p;
 
   [[nodiscard]] constexpr bool await_ready() const noexcept { return false; }
 
-  std::coroutine_handle<>
+  [[nodiscard]] std::coroutine_handle<>
   await_suspend(std::coroutine_handle<> /*unused*/) const noexcept {
-    if (p.state) {
-      p.state->mark_completed();
-      queues::TaskQueue *queue = p.state->scheduler_queue;
-      if (queue != nullptr) {
-        // Schedule continuation asynchronously
-        schedule_continuation(p.state, queue);
-        p.state = nullptr;
-        return std::noop_coroutine();
-      }
-      // No queue: use symmetric transfer
-      std::coroutine_handle<> cont;
-      std::shared_ptr<CoroutineState> cont_state;
-      {
-        std::lock_guard lock(p.state->mtx);
-        if (p.state->has_awaiter && p.state->continuation) {
-          cont = p.state->continuation;
-          cont_state = p.state->continuation_state;
-          p.state->has_awaiter = false;
-          p.state->continuation = nullptr;
-          p.state->continuation_state = nullptr;
-        }
-      }
-      p.state = nullptr; // release reference
-      if (cont) {
-        return cont; // transfer control to outer coroutine
-      }
+    auto state = p.state;
+    if (!state) {
       return std::noop_coroutine();
     }
-    return std::noop_coroutine();
+
+    p.state = nullptr; // release the promise's own reference
+
+    state->mark_executed();
+
+    std::coroutine_handle<> cont;
+    std::shared_ptr<CoroutineState> cont_state;
+
+    {
+      std::lock_guard lock(state->mtx);
+      if (state->awaiter_state == AwaiterState::Waiting) {
+        cont = state->continuation;
+        cont_state = state->continuation_state;
+        state->awaiter_state = AwaiterState::None;
+        state->continuation = nullptr;
+        state->continuation_state = nullptr;
+      }
+    }
+
+    if (!cont) {
+      return std::noop_coroutine();
+    }
+
+    queues::TaskQueue *queue =
+        state->scheduler_queue.load(std::memory_order_acquire);
+    if (queue != nullptr) {
+      queue->push([cont_state, queue]() {
+        cont_state->do_resume();
+        if (cont_state->done_executing()) {
+          schedule_continuation(cont_state, queue);
+        }
+      });
+      return std::noop_coroutine();
+    }
+
+    // TODO
+    // restructure so this return is guarantee to not be used anymore
+    // symetric transfer basically isn't being used here
+    return cont;
   }
 
   void await_resume() const noexcept {}
@@ -145,18 +132,27 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type {
   std::exception_ptr exception;
   std::shared_ptr<CoroutineState> state = nullptr;
   bool started = false;
-  bool skip_initial_suspend = false; // TODO find a way to remove this flag
 
   // Return type of the coroutine
   using task_type = Task<SP, T>;
   using handle_type = std::coroutine_handle<promise_type>;
 
   task_type get_return_object() noexcept {
-    return task_type{handle_type::from_promise(*this)};
+    auto h = handle_type::from_promise(*this);
+    state = make_shared_handle(h);
+    if constexpr (SP == policy::Suspend::Never) {
+      started = true;
+    }
+    return task_type{state};
   }
 
   constexpr auto initial_suspend() noexcept {
-    return InitialAwaiter<promise_type, SP>{*this};
+    if constexpr (SP == policy::Suspend::Always) {
+      return std::suspend_always{};
+    }
+    if constexpr (SP == policy::Suspend::Never) {
+      return std::suspend_never{};
+    }
   }
   constexpr auto final_suspend() noexcept {
     return FinalAwaiter<promise_type>{*this};
@@ -177,18 +173,27 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type<void, Task, SP> {
   std::exception_ptr exception;
   std::shared_ptr<CoroutineState> state = nullptr;
   bool started = false;
-  bool skip_initial_suspend = false; // TODO find a way to remove this flag
 
   // Return type of the coroutine
   using task_type = Task<SP, void>;
   using handle_type = std::coroutine_handle<promise_type>;
 
   task_type get_return_object() noexcept {
-    return task_type{handle_type::from_promise(*this)};
+    auto h = handle_type::from_promise(*this);
+    state = make_shared_handle(h);
+    if constexpr (SP == policy::Suspend::Never) {
+      started = true;
+    }
+    return task_type{state};
   }
 
   constexpr auto initial_suspend() noexcept {
-    return InitialAwaiter<promise_type, SP>{*this};
+    if constexpr (SP == policy::Suspend::Always) {
+      return std::suspend_always{};
+    }
+    if constexpr (SP == policy::Suspend::Never) {
+      return std::suspend_never{};
+    }
   }
   constexpr auto final_suspend() noexcept {
     return FinalAwaiter<promise_type>{*this};
@@ -212,34 +217,67 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
   explicit awaiter(SharedHandle h) noexcept : handle_(std::move(h)) {}
 
   [[nodiscard]] bool await_ready() const noexcept {
-    return !handle_ || handle_->handle.done();
+    return !handle_ || handle_->done_executing();
   }
 
-  std::coroutine_handle<>
-  await_suspend(std::coroutine_handle<> awaiting) noexcept {
+  template <typename OuterPromise>
+  bool await_suspend(std::coroutine_handle<OuterPromise> awaiting) noexcept {
 
     if (!handle_) {
-      return std::noop_coroutine();
+      return false;
     }
 
     auto typed = handle_type::from_address(handle_->handle.address());
     auto &promise = typed.promise();
 
+    if (handle_->done_executing()) {
+      return false;
+    }
+
     {
       std::lock_guard lock(handle_->mtx);
-      handle_->has_awaiter = true;
+
+      handle_->awaiter_state = AwaiterState::Registering;
       handle_->continuation = awaiting;
-      handle_->continuation_state = current_state;
+      handle_->continuation_state = awaiting.promise().state;
     }
 
     if (!promise.started) {
       promise.started = true;
-      promise.skip_initial_suspend = true;
-      handle_->handle.resume();
+
+      queues::TaskQueue *queue =
+          handle_->scheduler_queue.load(std::memory_order_acquire);
+
+      if (queue == nullptr) {
+        auto outer_state = awaiting.promise().state;
+        if (outer_state) {
+          queue = outer_state->scheduler_queue.load(std::memory_order_acquire);
+        }
+      }
+
+      if (queue != nullptr) {
+        queues::TaskQueue *expected = nullptr;
+        handle_->scheduler_queue.compare_exchange_strong(
+            expected, queue, std::memory_order_release,
+            std::memory_order_relaxed);
+        queue->push([h = handle_]() mutable { h->do_resume(); });
+      } else {
+        handle_->do_resume();
+      }
     }
 
-    // If inner suspended, outer will be resumed later by scheduler.
-    return std::noop_coroutine();
+    {
+      std::lock_guard lock(handle_->mtx);
+      if (handle_->executed.load(std::memory_order_acquire)) {
+        handle_->awaiter_state = AwaiterState::None;
+        handle_->continuation = nullptr;
+        handle_->continuation_state = nullptr;
+        return false;
+      }
+      handle_->awaiter_state = AwaiterState::Waiting;
+    }
+
+    return true;
   }
 
   // await_resume: returns T for non-void, void for void

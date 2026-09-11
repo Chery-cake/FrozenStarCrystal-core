@@ -1,6 +1,7 @@
 module;
 
 #include "FrozenStarCrystal-core_export.h"
+#include <cassert>
 
 export module concurrency.pool.coroutine:scheduler;
 
@@ -23,6 +24,12 @@ private:
 public:
   explicit Scheduler(queues::TaskQueue &queue) : queue_(queue) {};
 
+  // Move only
+  Scheduler(const Scheduler &) = delete;
+  Scheduler &operator=(const Scheduler &) = default;
+  Scheduler(Scheduler &&other) = delete;
+  Scheduler &operator=(Scheduler &&other) = default;
+
   constexpr bool await_ready() noexcept {
     if (!isPoolWorker) {
       return false;
@@ -35,22 +42,20 @@ public:
     }
   };
 
-  void await_suspend(std::coroutine_handle<> h) {
+  template <typename Promise>
+  void await_suspend(std::coroutine_handle<Promise> h) {
     // Capture the state of the coroutine that is about to suspend.
-    auto state = current_state;
+    auto state = h.promise().state;
+    assert(state && "promise.state must be set before any await");
 
     if (state) {
-      std::lock_guard lock(state->mtx);
-      state->scheduler_queue = &queue_;
+      queues::TaskQueue *expected = nullptr;
+      state->scheduler_queue.compare_exchange_strong(expected, &queue_,
+                                                     std::memory_order_release,
+                                                     std::memory_order_relaxed);
     }
 
-    queue_.push([h, state, this]() mutable {
-      h.resume();
-
-      if (state && state->done) {
-        schedule_continuation(state, &queue_);
-      }
-    });
+    queue_.push([state]() mutable { state->do_resume(); });
   }
 
   void await_resume() noexcept {};

@@ -22,14 +22,18 @@ class FROZENSTARCRYSTAL_CORE_API ThreadPool {
 private:
   std::unique_ptr<queues::TaskQueue> queue_;
   std::vector<std::jthread> threads_;
-  std::condition_variable cv_done_;
   std::atomic<size_t> active_tasks_{0};
 
-  mutable std::mutex threads_mutex_;
-  std::mutex tasks_mutex_;
+  mutable std::mutex mtx_;
 
   static void worker_loop(const std::stop_token &stoken,
                           queues::TaskQueue &queue);
+
+  void task_finished() {
+    if (active_tasks_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+      active_tasks_.notify_all();
+    }
+  }
 
 public:
   ThreadPool(const Pool &pool, size_t threads = 0);
@@ -40,7 +44,12 @@ public:
   ThreadPool(ThreadPool &&) = delete;
   ThreadPool &operator=(ThreadPool &&) = delete;
 
+  template <typename F>
+    requires std::is_invocable_v<F>
+  void submit_detach(F &&f);
+
   template <typename F, typename... Args>
+    requires std::is_invocable_v<F, Args...>
   std::future<std::invoke_result_t<F, Args...>> submit(F &&f, Args &&...args);
 
   template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline>
@@ -49,16 +58,21 @@ public:
   static coroutine::Scheduler<QP> schedule(queues::TaskQueue *queue) noexcept;
 
   void wait() {
-    std::unique_lock lock(tasks_mutex_);
-    cv_done_.wait(lock, [&tasks = active_tasks_, &queue = queue_]() {
-      return tasks.load(std::memory_order_acquire) == 0 && queue->empty();
-    });
+    if (coroutine::isPoolWorker) {
+      throw std::logic_error("ThreadPool::wait() called from worker thread");
+    }
+
+    size_t n = active_tasks_.load(std::memory_order_acquire);
+    while (n != 0) {
+      active_tasks_.wait(n, std::memory_order_acquire);
+      n = active_tasks_.load(std::memory_order_acquire);
+    }
   }
 
   void resize(size_t new_size);
   [[nodiscard]] size_t size() const noexcept {
     // TODO fix possible deadlock
-    std::unique_lock lock(threads_mutex_);
+    std::unique_lock lock(mtx_);
     return threads_.size();
   }
 
