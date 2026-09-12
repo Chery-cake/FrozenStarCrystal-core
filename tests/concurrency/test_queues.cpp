@@ -65,7 +65,10 @@ int main() {
   };
 
   static auto ex = []() {
-    std::println("Started id: {}", std::this_thread::get_id());
+    {
+      std::lock_guard lock(log_mutex);
+      std::println("Started id: {}", std::this_thread::get_id());
+    }
     tests();
   };
 

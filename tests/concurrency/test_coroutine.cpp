@@ -433,8 +433,10 @@ int main() {
   };
 
   static auto ex = [](uint32_t repeats) {
-    std::println("Started id: {}", std::this_thread::get_id());
-
+    {
+      std::lock_guard lock(log_mutex);
+      std::println("Started id: {}", std::this_thread::get_id());
+    }
     std::ranges::for_each(std::views::iota(0U, repeats),
                           [](uint32_t) { tests(); });
   };

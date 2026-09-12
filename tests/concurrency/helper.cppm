@@ -9,13 +9,17 @@ export {
   std::atomic<int> tests_run{0};
   std::atomic<int> tests_passed{0};
 
+  std::mutex log_mutex;
+
   void TEST(std::string_view name) {
     tests_run.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard lock(log_mutex);
     std::println("[TEST] {} ... ", name);
   }
 
   void PASS() {
     tests_passed.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard lock(log_mutex);
     std::println("PASSED");
   }
 

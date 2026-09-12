@@ -74,6 +74,7 @@
             pkgs.ninja
             glibcDev
             llvmTools
+            pkgs.perf
           ];
 
           env = {
