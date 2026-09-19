@@ -5,10 +5,10 @@ constexpr concurrency::pool::Pool p1("p1");
 constexpr concurrency::pool::Pool p2("p2");
 constexpr concurrency::pool::Pool p3("p3");
 
-void test_create() {
+template <concurrency::queues::TaskQueue TQ> void test_create() {
   TEST("create");
 
-  concurrency::pool::Manager m;
+  concurrency::pool::Manager<TQ> m;
 
   assert(m.createPool(&p1));
   assert(!m.createPool(&p1));
@@ -42,10 +42,10 @@ void test_create() {
   PASS();
 }
 
-void test_signals() {
+template <concurrency::queues::TaskQueue TQ> void test_signals() {
   TEST("signals");
 
-  concurrency::pool::Manager m;
+  concurrency::pool::Manager<TQ> m;
 
   std::atomic<int> count = 0;
 
@@ -89,32 +89,33 @@ void test_signals() {
   PASS();
 }
 
+template <concurrency::queues::TaskQueue TQ> static void tests() {
+  std::ranges::for_each(std::views::iota(0, 10), [](uint32_t) {
+    test_create<TQ>();
+    test_signals<TQ>();
+  });
+};
+
+template <concurrency::queues::TaskQueue TQ> static void ex() {
+  {
+    std::lock_guard lock(log_mutex);
+    std::println("Started id: {}", std::this_thread::get_id());
+  }
+  tests<TQ>();
+};
+
 int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
-  static auto tests = []() {
-    std::ranges::for_each(std::views::iota(0, 10), [](uint32_t) {
-      test_create();
-      test_signals();
-    });
-  };
-
-  static auto ex = []() {
-    {
-      std::lock_guard lock(log_mutex);
-      std::println("Started id: {}", std::this_thread::get_id());
-    }
-    tests();
-  };
-
   std::array<std::jthread, 5> threads;
 
-  std::ranges::for_each(threads,
-                        [](std::jthread &th) { th = std::jthread(ex); });
+  std::ranges::for_each(threads, [](std::jthread &th) {
+    th = std::jthread(ex<concurrency::queues::FifoTaskQueue>);
+  });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex();
+  ex<concurrency::queues::FifoTaskQueue>();
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

@@ -1,11 +1,10 @@
 #include <cassert>
 import concurrency_helper;
 
-void test_create() {
+template <concurrency::queues::TaskQueue TQ> void test_create() {
   TEST("create");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p);
+  concurrency::pool::ThreadPool<TQ> t{};
 
   assert(t.size() == std::thread::hardware_concurrency());
 
@@ -15,17 +14,16 @@ void test_create() {
   t.resize(10);
   assert(t.size() == 10);
 
-  concurrency::pool::ThreadPool tp(p, 5);
+  concurrency::pool::ThreadPool<TQ> tp(5);
   assert(tp.size() == 5);
 
   PASS();
 }
 
-void test_submit() {
+template <concurrency::queues::TaskQueue TQ> void test_submit() {
   TEST("submit");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p);
+  concurrency::pool::ThreadPool<TQ> t{};
 
   auto f = [](int x) {
     // TODO
@@ -75,11 +73,10 @@ void test_submit() {
   PASS();
 }
 
-void test_wait_empty() {
+template <concurrency::queues::TaskQueue TQ> void test_wait_empty() {
   TEST("wait empty");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p, 2);
+  concurrency::pool::ThreadPool<TQ> t(2);
 
   // Nothing submitted: wait must return immediately.
   t.wait();
@@ -88,11 +85,11 @@ void test_wait_empty() {
   PASS();
 }
 
+template <concurrency::queues::TaskQueue TQ>
 void test_wait_for_submit_detach() {
   TEST("wait for submit_detach");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p, 4);
+  concurrency::pool::ThreadPool<TQ> t(4);
 
   constexpr int kTasks = 64;
   std::atomic<int> completed{0};
@@ -110,11 +107,10 @@ void test_wait_for_submit_detach() {
   PASS();
 }
 
-void test_wait_with_futures() {
+template <concurrency::queues::TaskQueue TQ> void test_wait_with_futures() {
   TEST("wait with futures");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p, 4);
+  concurrency::pool::ThreadPool<TQ> t{4};
 
   std::atomic<int> sum{0};
   std::vector<std::future<void>> futs;
@@ -134,11 +130,10 @@ void test_wait_with_futures() {
   PASS();
 }
 
-void test_wait_repeated() {
+template <concurrency::queues::TaskQueue TQ> void test_wait_repeated() {
   TEST("wait repeated");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p, 4);
+  concurrency::pool::ThreadPool<TQ> t{4};
 
   // Tight submit+wait loop. This is the pattern that exposes the
   // lost-wakeup race between `task_finished` (atomic decrement + notify)
@@ -154,11 +149,11 @@ void test_wait_repeated() {
   PASS();
 }
 
+template <concurrency::queues::TaskQueue TQ>
 void test_wait_concurrent_submit() {
   TEST("wait concurrent submit");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p, 4);
+  concurrency::pool::ThreadPool<TQ> t{4};
 
   constexpr int kProducers = 4;
   constexpr int kPerProducer = 500;
@@ -186,11 +181,11 @@ void test_wait_concurrent_submit() {
   PASS();
 }
 
+template <concurrency::queues::TaskQueue TQ>
 void test_wait_from_worker_throws() {
   TEST("wait from worker throws");
 
-  concurrency::pool::Pool p("test");
-  concurrency::pool::ThreadPool t(p, 2);
+  concurrency::pool::ThreadPool<TQ> t{2};
 
   std::atomic<bool> threw{false};
 
@@ -201,46 +196,47 @@ void test_wait_from_worker_throws() {
       threw.store(true, std::memory_order_relaxed);
     }
   });
-  fut.get();
+  fut.wait();
 
   assert(threw.load(std::memory_order_relaxed));
 
   PASS();
 }
 
+template <concurrency::queues::TaskQueue TQ> static void tests() {
+  std::ranges::for_each(std::views::iota(0, 25), [](uint32_t) {
+    test_create<TQ>();
+    test_submit<TQ>();
+
+    test_wait_empty<TQ>();
+    test_wait_for_submit_detach<TQ>();
+    test_wait_with_futures<TQ>();
+    test_wait_repeated<TQ>();
+    test_wait_concurrent_submit<TQ>();
+    test_wait_from_worker_throws<TQ>();
+  });
+};
+
+template <concurrency::queues::TaskQueue TQ> static void ex() {
+  {
+    std::lock_guard lock(log_mutex);
+    std::println("Started id: {}", std::this_thread::get_id());
+  }
+  tests<TQ>();
+};
+
 int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
-  static auto tests = []() {
-    std::ranges::for_each(std::views::iota(0, 25), [](uint32_t) {
-      test_create();
-      test_submit();
-
-      test_wait_empty();
-      test_wait_for_submit_detach();
-      test_wait_with_futures();
-      test_wait_repeated();
-      test_wait_concurrent_submit();
-      test_wait_from_worker_throws();
-    });
-  };
-
-  static auto ex = []() {
-    {
-      std::lock_guard lock(log_mutex);
-      std::println("Started id: {}", std::this_thread::get_id());
-    }
-    tests();
-  };
-
   std::array<std::jthread, 5> threads;
 
-  std::ranges::for_each(threads,
-                        [](std::jthread &th) { th = std::jthread(ex); });
+  std::ranges::for_each(threads, [](std::jthread &th) {
+    th = std::jthread(ex<concurrency::queues::FifoTaskQueue>);
+  });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex();
+  ex<concurrency::queues::FifoTaskQueue>();
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

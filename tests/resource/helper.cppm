@@ -42,4 +42,30 @@ export {
 
     bool operator<=>(const resources &) const = default;
   };
+
+  struct resourcesNoTag {
+    int x = 0;
+    float y = 0.5F;
+    std::vector<int> vec;
+
+    resourcesNoTag() = default;
+    explicit resourcesNoTag(std::vector<int> v) : vec(std::move(v)) {}
+    resourcesNoTag(int xIn, float yIn) : x(xIn), y(yIn) {}
+    resourcesNoTag(int xIn, float yIn, std::vector<int> v)
+        : x(xIn), y(yIn), vec(std::move(v)) {}
+
+    auto operator<=>(const resourcesNoTag &) const = default;
+  };
+
+  struct resourcesAmbiguous {
+    int x = 0;
+    float y = 0.5F;
+    bool fromTag = false;
+
+    resourcesAmbiguous() = default;
+    resourcesAmbiguous(const tags &tag) : x(tag.x), y(tag.y), fromTag(true) {}
+    resourcesAmbiguous(int xIn, float yIn) : x(xIn), y(yIn), fromTag(false) {}
+
+    auto operator<=>(const resourcesAmbiguous &) const = default;
+  };
 }

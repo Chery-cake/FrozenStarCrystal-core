@@ -11,23 +11,15 @@ import concurrency.pool.coroutine;
 
 export namespace concurrency::pool {
 
-struct FROZENSTARCRYSTAL_CORE_API Pool {
-  std::string name;
-  queues::QueueKind queueKind = queues::QueueKind::FIFO;
-
-  constexpr auto operator<=>(const Pool &) const noexcept = default;
-};
-
-class FROZENSTARCRYSTAL_CORE_API ThreadPool {
+template <queues::TaskQueue TQ> class FROZENSTARCRYSTAL_CORE_API ThreadPool {
 private:
-  std::unique_ptr<queues::TaskQueue> queue_;
+  std::unique_ptr<TQ> queue_;
   std::vector<std::jthread> threads_;
   std::atomic<size_t> active_tasks_{0};
 
   mutable std::mutex mtx_;
 
-  static void worker_loop(const std::stop_token &stoken,
-                          queues::TaskQueue &queue);
+  static void worker_loop(const std::stop_token &stoken, TQ &queue);
 
   void task_finished() {
     if (active_tasks_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
@@ -36,7 +28,7 @@ private:
   }
 
 public:
-  ThreadPool(const Pool &pool, size_t threads = 0);
+  ThreadPool(size_t threads = 0);
   ~ThreadPool();
 
   ThreadPool(const ThreadPool &) = delete;
@@ -53,9 +45,9 @@ public:
   std::future<std::invoke_result_t<F, Args...>> submit(F &&f, Args &&...args);
 
   template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline>
-  coroutine::Scheduler<QP> schedule() noexcept;
+  coroutine::Scheduler<TQ, QP> schedule() noexcept;
   template <coroutine::policy::Queue QP = coroutine::policy::Queue::Enqueue>
-  static coroutine::Scheduler<QP> schedule(queues::TaskQueue *queue) noexcept;
+  static coroutine::Scheduler<TQ, QP> schedule(TQ *queue) noexcept;
 
   void wait() {
     if (coroutine::isPoolWorker) {
@@ -76,8 +68,8 @@ public:
     return threads_.size();
   }
 
-  [[nodiscard]] queues::TaskQueue *queue() { return queue_.get(); }
-  [[nodiscard]] const queues::TaskQueue *queue() const { return queue_.get(); }
+  [[nodiscard]] TQ *queue() { return queue_.get(); }
+  [[nodiscard]] const TQ *queue() const { return queue_.get(); }
 };
 
 } // namespace concurrency::pool

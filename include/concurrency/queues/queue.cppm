@@ -1,7 +1,5 @@
 module;
 
-#include "FrozenStarCrystal-core_export.h"
-
 export module concurrency.queues:queue;
 
 import std.compat;
@@ -12,16 +10,44 @@ using Task = std::move_only_function<void()>;
 
 enum class Priority : uint8_t { High, Normal, Low };
 
-struct FROZENSTARCRYSTAL_CORE_API TaskQueue {
-  virtual ~TaskQueue() = default;
+} // namespace concurrency::queues
 
-  virtual void
-  push(Task t, Priority p) = 0; // TODO find a better way to default the value
-  void push(Task t) { push(std::move(t), Priority::Normal); }
+namespace concurrency::queues {
 
-  virtual bool try_pop(Task &t, const std::stop_token &stoken) = 0;
-  virtual void notify_all() = 0;
-  virtual bool empty() = 0;
+// --- Base: operations *every* queue has, regardless of behavior ---
+template <typename Q>
+concept Base = requires(Q &q, Task &t) {
+  { q.push(std::move(t), Priority::Normal) } -> std::same_as<void>;
+  { q.notify_all() } -> std::same_as<void>;
+  { q.empty() } -> std::same_as<bool>;
+};
+
+// --- Behavior-specific concepts ---
+template <typename Q>
+concept Consuming =
+    Base<Q> && requires(Q &q, Task &t, const std::stop_token &st) {
+      { q.try_pop(t, st) } -> std::same_as<bool>;
+    };
+
+template <typename Q>
+concept Looping =
+    Base<Q> && requires(Q &q, Task &t, const std::stop_token &st) {
+      { q.peek(t, st) } -> std::same_as<bool>;
+      { q.rewind() } -> std::same_as<void>;
+    };
+
+} // namespace concurrency::queues
+
+export namespace concurrency::queues {
+
+// --- The main concept: any of the behaviors ---
+template <typename Q>
+concept TaskQueue = Consuming<Q> || Looping<Q>;
+
+enum class QueueBehaviour : uint8_t {
+  Consuming,
+  Looping
+
 };
 
 } // namespace concurrency::queues

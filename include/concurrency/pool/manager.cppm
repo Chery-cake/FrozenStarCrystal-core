@@ -5,26 +5,34 @@ module;
 export module concurrency.pool:manager;
 
 import std.compat;
+
 import resource;
 import signals;
+
+import concurrency.queues;
 import :threadPool;
-
-namespace concurrency::pool {
-
-using PoolRegistry =
-    resource::Registry<Pool, ThreadPool,
-                       resource::SharedPtrPolicy<Pool, ThreadPool>>;
-
-} // namespace concurrency::pool
 
 export namespace concurrency::pool {
 
-using PoolSignal = signals::Signals<void(const Pool *, ThreadPool *)>;
+struct FROZENSTARCRYSTAL_CORE_API Pool {
+  std::string name;
+  queues::QueueBehaviour queueBehaviour = queues::QueueBehaviour::Consuming;
+
+  constexpr auto operator<=>(const Pool &) const noexcept = default;
+};
+
+template <queues::TaskQueue TQ>
+using PoolRegistry =
+    resource::Registry<Pool, ThreadPool<TQ>,
+                       resource::SharedPtrPolicy<Pool, ThreadPool<TQ>>>;
+
+template <queues::TaskQueue TQ>
+using PoolSignal = signals::Signals<void(const Pool *, ThreadPool<TQ> *)>;
 using ResizeSignal = signals::Signals<void(const Pool *, size_t, size_t)>;
 
-class FROZENSTARCRYSTAL_CORE_API Manager {
+template <queues::TaskQueue TQ> class FROZENSTARCRYSTAL_CORE_API Manager {
 private:
-  PoolRegistry registry_;
+  PoolRegistry<TQ> registry_;
 
   std::recursive_mutex mutex_;
 
@@ -38,8 +46,8 @@ public:
   Manager &operator=(Manager &&) = delete;
 
   // Signal objects – public so listeners can connect
-  PoolSignal onPoolAdded;
-  PoolSignal onPoolRemoved;
+  PoolSignal<TQ> onPoolAdded;
+  PoolSignal<TQ> onPoolRemoved;
   ResizeSignal onPoolResized;
 
   // Convenience: disconnect all manager signals at once
@@ -58,7 +66,7 @@ public:
              size_t threads_to_extract);
 
   // Access
-  std::weak_ptr<ThreadPool> getPool(const Pool *tag);
+  std::weak_ptr<ThreadPool<TQ>> getPool(const Pool *tag);
 
   // Resize an existing pool directly (also accessible through
   // ThreadPool::resize, but the manager version emits the signal)

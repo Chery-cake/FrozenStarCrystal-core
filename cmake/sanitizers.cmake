@@ -26,6 +26,10 @@ if(NOT DEFINED LSAN_SUPPRESSION_FILE)
     set(LSAN_SUPPRESSION_FILE "${SANITIZER_SUPPRESSION_DIR}/lsan.supp" CACHE FILEPATH
         "Path to LSan suppression file")
 endif()
+if(NOT DEFINED MSAN_SUPPRESSION_FILE)
+    set(MSAN_SUPPRESSION_FILE "${SANITIZER_SUPPRESSION_DIR}/msan.supp" CACHE FILEPATH
+        "Path to LSan suppression file")
+endif()
 
 # ---- Generate a source file with default options & suppressions ----
 function(_generate_sanitizer_defaults TARGET_NAME)
@@ -86,16 +90,6 @@ function(target_enable_sanitizers TARGET)
         list(APPEND _san_lower_list "${s_lower}")
     endforeach()
 
-    # ---- Mutual exclusion checks ---------------------------------------
-    if("address" IN_LIST _san_lower_list AND "thread" IN_LIST _san_lower_list)
-        message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be used together")
-    endif()
-
-    # (Optional) warn about redundant combinations
-    if("address" IN_LIST _san_lower_list AND "leak" IN_LIST _san_lower_list)
-        message(WARNING "AddressSanitizer already includes LeakSanitizer; 'leak' is redundant")
-    endif()
-
     # ---- Build the -fsanitize flag -------------------------------------
     set(_san_flag_list)
     foreach(s IN LISTS _san_lower_list)
@@ -142,6 +136,9 @@ function(target_enable_sanitizers TARGET)
     elseif("leak" IN_LIST ENABLED_SANITIZERS OR "address" IN_LIST ENABLED_SANITIZERS)
         list(APPEND _target_env "LSAN_OPTIONS=print_suppressions=0")
     endif()
+    if("memory" IN_LIST ENABLED_SANITIZERS AND MSAN_SUPPRESSION_FILE)
+        list(APPEND _target_env "MSAN_OPTIONS=suppressions=${MSAN_SUPPRESSION_FILE}:print_suppressions=0")
+    endif()
     if("undefined" IN_LIST ENABLED_SANITIZERS)
         list(APPEND _target_env "UBSAN_OPTIONS=print_stacktrace=1")
     endif()
@@ -166,16 +163,6 @@ function(enable_sanitizers_test_target TARGET_NAME TARGET_EXE)
         string(TOLOWER "${s}" s_lower)
         list(APPEND _san_lower_list "${s_lower}")
     endforeach()
-
-    # ---- Mutual exclusion checks ---------------------------------------
-    if("address" IN_LIST _san_lower_list AND "thread" IN_LIST _san_lower_list)
-        message(FATAL_ERROR "AddressSanitizer and ThreadSanitizer cannot be used together")
-    endif()
-
-    # (Optional) warn about redundant combinations
-    if("address" IN_LIST _san_lower_list AND "leak" IN_LIST _san_lower_list)
-        message(WARNING "AddressSanitizer already includes LeakSanitizer; 'leak' is redundant")
-    endif()
 
     # ---- Build the -fsanitize flag -------------------------------------
     set(_san_flag_list)
@@ -225,12 +212,15 @@ function(enable_sanitizers_test_target TARGET_NAME TARGET_EXE)
     elseif("leak" IN_LIST ENABLED_SANITIZERS OR "address" IN_LIST ENABLED_SANITIZERS)
         list(APPEND _test_env "LSAN_OPTIONS=print_suppressions=0")
     endif()
+    if("memory" IN_LIST ENABLED_SANITIZERS AND MSAN_SUPPRESSION_FILE)
+        list(APPEND _test_env "MSAN_OPTIONS=suppressions=${MSAN_SUPPRESSION_FILE}:print_suppressions=0")
+    endif()
     if("undefined" IN_LIST ENABLED_SANITIZERS)
         list(APPEND _test_env "UBSAN_OPTIONS=print_stacktrace=1")
     endif()
     if(_test_env)
-        set_tests_properties(${TARGET} PROPERTIES ENVIRONMENT "${_test_env}")
+        set_tests_properties(${TARGET_NAME} PROPERTIES ENVIRONMENT "${_test_env}")
     endif()
 
-    message(STATUS "Sanitizers enabled ${_san_lower_list} on test ${TARGET}")
+    message(STATUS "Sanitizers enabled ${_san_lower_list} on test ${TARGET_NAME}")
 endfunction()

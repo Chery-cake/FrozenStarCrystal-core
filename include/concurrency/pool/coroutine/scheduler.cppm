@@ -17,12 +17,13 @@ export namespace concurrency::pool::coroutine {
 
 inline thread_local bool isPoolWorker = false;
 
-template <policy::Queue QP> struct FROZENSTARCRYSTAL_CORE_API Scheduler {
+template <queues::TaskQueue TQ, policy::Queue QP>
+struct FROZENSTARCRYSTAL_CORE_API Scheduler {
 private:
-  queues::TaskQueue &queue_;
+  TQ &queue_;
 
 public:
-  explicit Scheduler(queues::TaskQueue &queue) : queue_(queue) {};
+  explicit Scheduler(TQ &queue) : queue_(queue) {};
 
   // Move only
   Scheduler(const Scheduler &) = delete;
@@ -49,7 +50,7 @@ public:
     assert(state && "promise.state must be set before any await");
 
     if (state) {
-      queues::TaskQueue *expected = nullptr;
+      TQ *expected = nullptr;
       state->scheduler_queue.compare_exchange_strong(expected, &queue_,
                                                      std::memory_order_release,
                                                      std::memory_order_relaxed);

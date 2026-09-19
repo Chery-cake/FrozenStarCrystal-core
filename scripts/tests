@@ -68,7 +68,6 @@ if [ ! -f "$PROJECT_ROOT/build/CTestTestfile.cmake" ]; then
 fi
 
 # Build the ctest command
-
 if command -v perf >/dev/null 2>&1; then
     CTEST_CMD=(perf stat ctest --test-dir "$PROJECT_ROOT/build" --parallel "$CORES")
 else

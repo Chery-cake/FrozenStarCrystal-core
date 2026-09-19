@@ -14,6 +14,22 @@ using registryWeak =
     resource::Registry<tags, resources,
                        resource::WeakPtrPolicy<tags, resources>>;
 
+using registryUniqueNoTag =
+    resource::Registry<tags, resourcesNoTag,
+                       resource::UniquePtrPolicy<tags, resourcesNoTag>>;
+
+using registrySharedNoTag =
+    resource::Registry<tags, resourcesNoTag,
+                       resource::SharedPtrPolicy<tags, resourcesNoTag>>;
+
+using registryUniqueAmbiguous =
+    resource::Registry<tags, resourcesAmbiguous,
+                       resource::UniquePtrPolicy<tags, resourcesAmbiguous>>;
+
+using registrySharedAmbiguous =
+    resource::Registry<tags, resourcesAmbiguous,
+                       resource::UniquePtrPolicy<tags, resourcesAmbiguous>>;
+
 static inline const tags T4{.x = 4, .y = 4.5};
 
 // -------------------------- add tests --------------------------
@@ -615,6 +631,154 @@ void test_list_weak() {
   PASS();
 }
 
+// -------------- explicit dispatch tests --------------
+
+// Case 1: resource has tag-taking constructors only.
+// Only overload 1 (tag-forwarding) is viable.
+void test_emplace_tagged_unique() {
+  TEST("emplace -> tagged overload");
+
+  registryUnique reg;
+  std::vector<int> vec{7, 7};
+
+  reg.emplace(&tagsCreated::T1);      // calls resources(const tags&)
+  reg.emplace(&tagsCreated::T2, vec); // calls resources(const tags&, vec&)
+
+  assert(reg.size() == 2);
+
+  // Values came FROM the tag — this proves overload 1 ran.
+  assert(reg.get(&tagsCreated::T1)->x == tagsCreated::T1.x);
+  assert(reg.get(&tagsCreated::T1)->y == tagsCreated::T1.y);
+  assert(reg.get(&tagsCreated::T2)->x == tagsCreated::T2.x);
+  assert(reg.get(&tagsCreated::T2)->vec == vec);
+
+  PASS();
+}
+
+void test_emplace_tagged_shared() {
+  TEST("emplace -> tagged overload");
+
+  registryShared reg;
+  std::vector<int> vec{7, 7};
+
+  reg.emplace(&tagsCreated::T1);      // calls resources(const tags&)
+  reg.emplace(&tagsCreated::T2, vec); // calls resources(const tags&, vec&)
+
+  assert(reg.size() == 2);
+
+  // Values came FROM the tag — this proves overload 1 ran.
+  assert(reg.get(&tagsCreated::T1)->x == tagsCreated::T1.x);
+  assert(reg.get(&tagsCreated::T1)->y == tagsCreated::T1.y);
+  assert(reg.get(&tagsCreated::T2)->x == tagsCreated::T2.x);
+  assert(reg.get(&tagsCreated::T2)->vec == vec);
+
+  PASS();
+}
+
+// Case 2: resource has no tag-taking constructor.
+// Only overload 2 (args-only) is viable.
+void test_emplace_untagged_unique() {
+  TEST("emplace -> untagged overload");
+
+  registryUniqueNoTag reg;
+  std::vector<int> vec{7, 7};
+
+  reg.emplace(&tagsCreated::T1);           // resourcesNoTag()
+  reg.emplace(&tagsCreated::T2, 42, 4.2F); // resourcesNoTag(int, float)
+  reg.emplace(&T3, 3, 3.5F, vec);          // resourcesNoTag(int, float, vec)
+  reg.emplace(&T4, vec);                   // resourcesNoTag(vec)
+
+  assert(reg.size() == 4);
+
+  // Values came from the ARGS, not the tag — this proves overload 2 ran.
+  assert(reg.get(&tagsCreated::T1)->x == 0);    // default, not T1.x == 1
+  assert(reg.get(&tagsCreated::T1)->y == 0.5F); // default, not T1.y == 1.5
+  assert(reg.get(&tagsCreated::T2)->x == 42);
+  assert(reg.get(&tagsCreated::T2)->y == 4.2F);
+  assert(reg.get(&T3)->x == 3);
+  assert(reg.get(&T3)->y == 3.5F);
+  assert(reg.get(&T3)->vec == vec);
+  assert(reg.get(&T4)->vec == vec);
+
+  PASS();
+}
+
+void test_emplace_untagged_shared() {
+  TEST("emplace -> untagged overload");
+
+  registrySharedNoTag reg;
+  std::vector<int> vec{7, 7};
+
+  reg.emplace(&tagsCreated::T1);           // resourcesNoTag()
+  reg.emplace(&tagsCreated::T2, 42, 4.2F); // resourcesNoTag(int, float)
+  reg.emplace(&T3, 3, 3.5F, vec);          // resourcesNoTag(int, float, vec)
+  reg.emplace(&T4, vec);                   // resourcesNoTag(vec)
+
+  assert(reg.size() == 4);
+
+  // Values came from the ARGS, not the tag — this proves overload 2 ran.
+  assert(reg.get(&tagsCreated::T1)->x == 0);    // default, not T1.x == 1
+  assert(reg.get(&tagsCreated::T1)->y == 0.5F); // default, not T1.y == 1.5
+  assert(reg.get(&tagsCreated::T2)->x == 42);
+  assert(reg.get(&tagsCreated::T2)->y == 4.2F);
+  assert(reg.get(&T3)->x == 3);
+  assert(reg.get(&T3)->y == 3.5F);
+  assert(reg.get(&T3)->vec == vec);
+  assert(reg.get(&T4)->vec == vec);
+
+  PASS();
+}
+
+// Case 3: resource has BOTH constructor forms.
+// Overloads 1 and 3 are both viable; overload 3 is more constrained
+// (it requires both conjuncts) so it wins by partial ordering. It
+// forwards *tag, so the tag-taking constructor runs.
+void test_emplace_ambiguous_unique() {
+  TEST("emplace -> ambiguous (tag wins)");
+
+  registryUniqueAmbiguous reg;
+  std::vector<int> vec{9, 9};
+
+  reg.emplace(&tagsCreated::T1);
+  reg.emplace(&T3);
+
+  assert(reg.size() == 2);
+
+  // fromTag == true proves the tag-taking ctor ran, i.e. overload 3 won.
+  assert(reg.get(&tagsCreated::T1)->fromTag == true);
+  assert(reg.get(&tagsCreated::T1)->x == tagsCreated::T1.x);
+  assert(reg.get(&tagsCreated::T1)->y == tagsCreated::T1.y);
+
+  assert(reg.get(&T3)->fromTag == true);
+  assert(reg.get(&T3)->x == T3.x);
+  assert(reg.get(&T3)->y == T3.y);
+
+  PASS();
+}
+
+void test_emplace_ambiguous_shared() {
+  TEST("emplace -> ambiguous (tag wins)");
+
+  registrySharedAmbiguous reg;
+  std::vector<int> vec{9, 9};
+
+  reg.emplace(&tagsCreated::T1);
+  reg.emplace(&T3);
+
+  assert(reg.size() == 2);
+
+  // fromTag == true proves the tag-taking ctor ran, i.e. overload 3 won.
+  assert(reg.get(&tagsCreated::T1)->fromTag == true);
+  assert(reg.get(&tagsCreated::T1)->x == tagsCreated::T1.x);
+  assert(reg.get(&tagsCreated::T1)->y == tagsCreated::T1.y);
+
+  assert(reg.get(&T3)->fromTag == true);
+  assert(reg.get(&T3)->x == T3.x);
+  assert(reg.get(&T3)->y == T3.y);
+
+  PASS();
+}
+
 int main() {
   std::println("=== Resoure Registry Tests ===");
 
@@ -630,6 +794,15 @@ int main() {
   test_list_unique();
   test_list_shared();
   test_list_weak();
+
+  test_emplace_tagged_unique();
+  test_emplace_tagged_shared();
+
+  test_emplace_untagged_unique();
+  test_emplace_untagged_shared();
+
+  test_emplace_ambiguous_unique();
+  test_emplace_ambiguous_shared();
 
   std::println("\n{}/{} tests passed", tests_passed, tests_run);
   return (tests_passed == tests_run) ? 0 : 1;

@@ -7,28 +7,29 @@ export module concurrency.pool.coroutine:task;
 import std.compat;
 
 import concurrency.pool.coroutine.policy;
+import concurrency.queues;
 import :state;
 import :structs;
 
 export namespace concurrency::pool::coroutine {
 
-template <policy::Suspend SP, typename T>
+template <queues::TaskQueue TQ, policy::Suspend SP, typename T>
 class FROZENSTARCRYSTAL_CORE_API CoroutineTask {
 public:
   // Use the standalone promise_type and awaiter
-  using promise_type = promise_type<T, CoroutineTask, SP>;
+  using promise_type = promise_type<T, TQ, CoroutineTask, SP>;
   using handle_type = std::coroutine_handle<promise_type>;
-  using awaiter_type = awaiter<T, CoroutineTask, SP>;
+  using awaiter_type = awaiter<T, TQ, CoroutineTask, SP>;
 
 private:
-  SharedHandle handle_;
+  SharedHandle<TQ> handle_;
 
   handle_type typed_handle() const {
     return handle_type::from_address(handle_->handle.address());
   }
 
 public:
-  explicit CoroutineTask(SharedHandle handle) noexcept
+  explicit CoroutineTask(SharedHandle<TQ> handle) noexcept
       : handle_(std::move(handle)) {}
 
   CoroutineTask(const CoroutineTask &) = delete;

@@ -9,16 +9,15 @@ import :queue;
 
 export namespace concurrency::queues {
 
-struct FROZENSTARCRYSTAL_CORE_API FifoTaskQueue : public TaskQueue {
+struct FROZENSTARCRYSTAL_CORE_API FifoTaskQueue {
 private:
   std::queue<Task> queue_;
   std::mutex mutex_;
   std::condition_variable_any cv_;
 
 public:
-  using TaskQueue::push;
-
-  void push(Task t, Priority /*p*/) override { // TODO implement priority
+  void push(Task t,
+            Priority p = Priority::Normal) { // TODO implement priority
     {
       std::scoped_lock lock(mutex_);
       queue_.push(std::move(t));
@@ -26,7 +25,7 @@ public:
     cv_.notify_one();
   }
 
-  bool try_pop(Task &t, const std::stop_token &stoken) override {
+  bool try_pop(Task &t, const std::stop_token &stoken) {
     std::unique_lock lock(mutex_);
     if (!cv_.wait(lock, stoken, [&queue = queue_] { return !queue.empty(); })) {
       return false;
@@ -37,12 +36,14 @@ public:
     return true;
   }
 
-  void notify_all() override { cv_.notify_all(); }
+  void notify_all() { cv_.notify_all(); }
 
-  bool empty() override {
+  bool empty() {
     std::unique_lock lock(mutex_);
     return queue_.empty();
   }
 };
+
+static_assert(TaskQueue<FifoTaskQueue>);
 
 } // namespace concurrency::queues

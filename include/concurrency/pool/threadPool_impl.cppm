@@ -9,13 +9,9 @@ import concurrency.pool.coroutine;
 
 export namespace concurrency::pool {
 
-inline ThreadPool::ThreadPool(const Pool &pool, size_t num_threads) {
-  switch (pool.queueKind) {
-  default:
-  case queues::QueueKind::FIFO:
-    queue_ = std::make_unique<queues::FifoTaskQueue>();
-    break;
-  }
+template <queues::TaskQueue TQ>
+inline ThreadPool<TQ>::ThreadPool(size_t num_threads) {
+  queue_ = std::make_unique<TQ>();
 
   size_t threads =
       (num_threads == 0) ? std::thread::hardware_concurrency() : num_threads;
@@ -30,7 +26,7 @@ inline ThreadPool::ThreadPool(const Pool &pool, size_t num_threads) {
       });
 }
 
-inline ThreadPool::~ThreadPool() {
+template <queues::TaskQueue TQ> inline ThreadPool<TQ>::~ThreadPool() {
   {
     std::unique_lock lock(mtx_);
     std::ranges::for_each(threads_, [](std::jthread &t) { t.request_stop(); });
@@ -42,8 +38,9 @@ inline ThreadPool::~ThreadPool() {
   threads_.clear();
 }
 
-inline void ThreadPool::worker_loop(const std::stop_token &stoken,
-                                    queues::TaskQueue &queue) {
+template <queues::TaskQueue TQ>
+inline void ThreadPool<TQ>::worker_loop(const std::stop_token &stoken,
+                                        TQ &queue) {
   struct WorkerGuard {
     ~WorkerGuard() { coroutine::isPoolWorker = false; }
 
@@ -58,32 +55,43 @@ inline void ThreadPool::worker_loop(const std::stop_token &stoken,
   }
 }
 
+template <queues::TaskQueue TQ>
 template <typename F>
   requires std::is_invocable_v<F>
-void ThreadPool::submit_detach(F &&f) {
+void ThreadPool<TQ>::submit_detach(F &&f) {
   active_tasks_.fetch_add(1, std::memory_order_relaxed);
 
-  queue_->push([this, f = std::forward<F>(f)]() mutable {
-    struct Guard {
-      ThreadPool *pool;
-      ~Guard() { pool->task_finished(); }
-    } guard{this};
-    try {
-      f();
-    } catch (const std::exception &e) {
-      // TODO: route to a global error handler / log sink
-      std::println(std::cerr, "submit_detach: task threw: {}", e.what());
-    } catch (...) {
-      std::println(std::cerr, "submit_detach: task threw unknown exception");
-      // TODO handle exceptions
-    }
-  });
+  try {
+    queue_->push([this, f = std::forward<F>(f)]() mutable {
+      struct Guard {
+        ThreadPool *pool;
+        ~Guard() { pool->task_finished(); }
+      } guard{this};
+      try {
+        f();
+      } catch (const std::exception &e) {
+        // TODO: route to a global error handler / log sink
+        std::println(std::cerr, "submit_detach: task threw: {}", e.what());
+      } catch (...) {
+        std::println(std::cerr, "submit_detach: task threw unknown exception");
+        // TODO handle exceptions
+      }
+    });
+  } catch (const std::exception &e) { // TODO make it rethorw the exception
+                                      // after decreasing the cunter
+    active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+    std::println(std::cerr, "submit_detach: queue threw: {}", e.what());
+  } catch (...) {
+    active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+    std::println(std::cerr, "submit_detach: queue threw unknown exception");
+  }
 }
 
+template <queues::TaskQueue TQ>
 template <typename F, typename... Args>
   requires std::is_invocable_v<F, Args...>
 std::future<std::invoke_result_t<F, Args...>>
-ThreadPool::submit(F &&f, Args &&...args) {
+ThreadPool<TQ>::submit(F &&f, Args &&...args) {
   using Ret = std::invoke_result_t<F, Args...>;
 
   auto task = std::make_shared<std::packaged_task<Ret()>>(
@@ -97,17 +105,20 @@ ThreadPool::submit(F &&f, Args &&...args) {
   return fut;
 }
 
+template <queues::TaskQueue TQ>
 template <coroutine::policy::Queue QP>
-inline coroutine::Scheduler<QP> ThreadPool::schedule() noexcept {
-  return coroutine::Scheduler<QP>(*queue_);
+inline coroutine::Scheduler<TQ, QP> ThreadPool<TQ>::schedule() noexcept {
+  return coroutine::Scheduler<TQ, QP>(*queue_);
 }
+template <queues::TaskQueue TQ>
 template <coroutine::policy::Queue QP>
-inline coroutine::Scheduler<QP>
-ThreadPool::schedule(queues::TaskQueue *queue) noexcept {
-  return coroutine::Scheduler<QP>(*queue);
+inline coroutine::Scheduler<TQ, QP>
+ThreadPool<TQ>::schedule(TQ *queue) noexcept {
+  return coroutine::Scheduler<TQ, QP>(*queue);
 }
 
-inline void ThreadPool::resize(size_t new_size) {
+template <queues::TaskQueue TQ>
+inline void ThreadPool<TQ>::resize(size_t new_size) {
   std::unique_lock lock(mtx_);
   size_t current = threads_.size();
 
