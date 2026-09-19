@@ -8,32 +8,30 @@ export namespace concurrency::queues {
 
 using Task = std::move_only_function<void()>;
 
-enum class Priority : uint8_t { High, Normal, Low };
-
 } // namespace concurrency::queues
 
 namespace concurrency::queues {
 
 // --- Base: operations *every* queue has, regardless of behavior ---
-template <typename Q>
-concept Base = requires(Q &q, Task &t) {
-  { q.push(std::move(t), Priority::Normal) } -> std::same_as<void>;
+template <typename Q, typename Pushed = Task>
+concept Base = requires(Q &q, Pushed &p) {
+  { q.push(std::move(p)) } -> std::same_as<void>;
   { q.notify_all() } -> std::same_as<void>;
   { q.empty() } -> std::same_as<bool>;
 };
 
 // --- Behavior-specific concepts ---
-template <typename Q>
+template <typename Q, typename Pushed>
 concept Consuming =
-    Base<Q> && requires(Q &q, Task &t, const std::stop_token &st) {
+    Base<Q, Pushed> && requires(Q &q, Task &t, const std::stop_token &st) {
       { q.try_pop(t, st) } -> std::same_as<bool>;
     };
 
-template <typename Q>
+template <typename Q, typename Pushed>
 concept Looping =
-    Base<Q> && requires(Q &q, Task &t, const std::stop_token &st) {
+    Base<Q, Pushed> && requires(Q &q, Task &t, const std::stop_token &st) {
       { q.peek(t, st) } -> std::same_as<bool>;
-      { q.rewind() } -> std::same_as<void>;
+      { q.clear() } -> std::same_as<void>;
     };
 
 } // namespace concurrency::queues
@@ -41,13 +39,12 @@ concept Looping =
 export namespace concurrency::queues {
 
 // --- The main concept: any of the behaviors ---
-template <typename Q>
-concept TaskQueue = Consuming<Q> || Looping<Q>;
+template <typename Q, typename Pushed = Task>
+concept Queue = Consuming<Q, Pushed> || Looping<Q, Pushed>;
 
-enum class QueueBehaviour : uint8_t {
+enum class Behaviour : uint8_t {
   Consuming,
-  Looping
-
+  Looping,
 };
 
 } // namespace concurrency::queues

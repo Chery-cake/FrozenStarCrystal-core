@@ -16,7 +16,7 @@ enum class AwaiterState : uint8_t {
   Waiting,     // awaiter suspended
 };
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 struct FROZENSTARCRYSTAL_CORE_API CoroutineState
     : std::enable_shared_from_this<CoroutineState<TQ>> {
 
@@ -65,10 +65,10 @@ struct FROZENSTARCRYSTAL_CORE_API CoroutineState
   }
 };
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 using SharedHandle = std::shared_ptr<CoroutineState<TQ>>;
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline SharedHandle<TQ> make_shared_handle(std::coroutine_handle<> h) {
   return std::make_shared<CoroutineState<TQ>>(h);
 }

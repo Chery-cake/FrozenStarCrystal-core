@@ -1,7 +1,7 @@
 #include <cassert>
 import concurrency_helper;
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, void>
 scheduler_probe_always(concurrency::pool::ThreadPool<TQ> &t,
@@ -12,7 +12,7 @@ scheduler_probe_always(concurrency::pool::ThreadPool<TQ> &t,
   result = (!before && after);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, void>
 scheduler_probe_always2(TQ *queue, std::optional<bool> &result) {
@@ -22,7 +22,7 @@ scheduler_probe_always2(TQ *queue, std::optional<bool> &result) {
   result = (!before && after);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Never, void>
 scheduler_probe_never(concurrency::pool::ThreadPool<TQ> &t,
@@ -33,7 +33,7 @@ scheduler_probe_never(concurrency::pool::ThreadPool<TQ> &t,
   result = (!before && after);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Never, void>
 scheduler_probe_never2(TQ *queue, std::optional<bool> &result) {
@@ -45,7 +45,7 @@ scheduler_probe_never2(TQ *queue, std::optional<bool> &result) {
 
 ///////////////////////////////////////
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 scheduler_return_probe_always(concurrency::pool::ThreadPool<TQ> &t) {
@@ -55,7 +55,7 @@ scheduler_return_probe_always(concurrency::pool::ThreadPool<TQ> &t) {
   co_return (!before && after);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 scheduler_return_probe_always2(TQ *queue) {
@@ -65,7 +65,7 @@ scheduler_return_probe_always2(TQ *queue) {
   co_return (!before && after);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Never, bool>
 scheduler_return_probe_never(concurrency::pool::ThreadPool<TQ> &t) {
@@ -75,7 +75,7 @@ scheduler_return_probe_never(concurrency::pool::ThreadPool<TQ> &t) {
   co_return (!before && after);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Never, bool>
 scheduler_return_probe_never2(TQ *queue) {
@@ -87,7 +87,7 @@ scheduler_return_probe_never2(TQ *queue) {
 
 //////////////////////////////////////
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, void>
 await_probe_void_always(concurrency::pool::ThreadPool<TQ> &t,
@@ -95,14 +95,14 @@ await_probe_void_always(concurrency::pool::ThreadPool<TQ> &t,
   co_await scheduler_probe_always(t, result);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 await_probe_value_always(concurrency::pool::ThreadPool<TQ> &t) {
   co_return co_await scheduler_return_probe_always(t);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Never, void>
 await_probe_void_never(concurrency::pool::ThreadPool<TQ> &t,
@@ -110,7 +110,7 @@ await_probe_void_never(concurrency::pool::ThreadPool<TQ> &t,
   co_await scheduler_probe_never(t, result);
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Never, bool>
 await_probe_value_never(concurrency::pool::ThreadPool<TQ> &t) {
@@ -119,7 +119,7 @@ await_probe_value_never(concurrency::pool::ThreadPool<TQ> &t) {
 
 //////////////////////////////////////
 
-template <concurrency::queues::TaskQueue TQ> void test_void_always() {
+template <concurrency::queues::Queue TQ> void test_void_always() {
   TEST("void always");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -141,7 +141,7 @@ template <concurrency::queues::TaskQueue TQ> void test_void_always() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_value_always() {
+template <concurrency::queues::Queue TQ> void test_value_always() {
   TEST("value always");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -155,7 +155,7 @@ template <concurrency::queues::TaskQueue TQ> void test_value_always() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_void_never() {
+template <concurrency::queues::Queue TQ> void test_void_never() {
   TEST("void never");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -177,7 +177,7 @@ template <concurrency::queues::TaskQueue TQ> void test_void_never() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_value_never() {
+template <concurrency::queues::Queue TQ> void test_value_never() {
   TEST("value never");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -191,7 +191,7 @@ template <concurrency::queues::TaskQueue TQ> void test_value_never() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_co_await_void_always() {
+template <concurrency::queues::Queue TQ> void test_co_await_void_always() {
   TEST("co_await void always");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -206,7 +206,7 @@ template <concurrency::queues::TaskQueue TQ> void test_co_await_void_always() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_co_await_value_always() {
+template <concurrency::queues::Queue TQ> void test_co_await_value_always() {
   TEST("co_await value always");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -217,7 +217,7 @@ template <concurrency::queues::TaskQueue TQ> void test_co_await_value_always() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_co_await_void_never() {
+template <concurrency::queues::Queue TQ> void test_co_await_void_never() {
   TEST("co_await void never");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -232,7 +232,7 @@ template <concurrency::queues::TaskQueue TQ> void test_co_await_void_never() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_co_await_value_never() {
+template <concurrency::queues::Queue TQ> void test_co_await_value_never() {
   TEST("co_await value never");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -245,7 +245,7 @@ template <concurrency::queues::TaskQueue TQ> void test_co_await_value_never() {
 
 /////////////////////////////////////////////
 
-template <concurrency::queues::TaskQueue TQ,
+template <concurrency::queues::Queue TQ,
           concurrency::pool::coroutine::policy::Suspend SP>
 concurrency::pool::coroutine::CoroutineTask<TQ, SP, void>
 probe_initial_suspend(bool &flag) {
@@ -253,8 +253,7 @@ probe_initial_suspend(bool &flag) {
   co_return;
 }
 
-template <concurrency::queues::TaskQueue TQ>
-void test_initial_suspend_always() {
+template <concurrency::queues::Queue TQ> void test_initial_suspend_always() {
   TEST("suspend always");
   bool flag = false;
   auto task = probe_initial_suspend<
@@ -265,7 +264,7 @@ void test_initial_suspend_always() {
   assert(task.done());
   PASS();
 }
-template <concurrency::queues::TaskQueue TQ> void test_initial_suspend_never() {
+template <concurrency::queues::Queue TQ> void test_initial_suspend_never() {
   TEST("suspend never");
   bool flag = false;
   auto task = probe_initial_suspend<
@@ -278,7 +277,7 @@ template <concurrency::queues::TaskQueue TQ> void test_initial_suspend_never() {
 /////////////////////////////////////////////
 
 // --- Nested scheduling with final continuation ---
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 inner_schedule_and_return(concurrency::pool::ThreadPool<TQ> &t) {
@@ -286,7 +285,7 @@ inner_schedule_and_return(concurrency::pool::ThreadPool<TQ> &t) {
   co_return true;
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 outer_awaits_inner(concurrency::pool::ThreadPool<TQ> &t) {
@@ -294,7 +293,7 @@ outer_awaits_inner(concurrency::pool::ThreadPool<TQ> &t) {
   co_return result;
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 void test_nested_schedule_continuation() {
   TEST("nested schedule continuation");
 
@@ -316,7 +315,7 @@ void test_nested_schedule_continuation() {
 //////////////////////////////////////////////
 
 // --- External resume (simulates fence waiter) ---
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 external_resume_inner(concurrency::pool::ThreadPool<TQ> &t) {
@@ -327,7 +326,7 @@ external_resume_inner(concurrency::pool::ThreadPool<TQ> &t) {
   co_return true;
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, bool>
 external_resume_outer(concurrency::pool::ThreadPool<TQ> &t) {
@@ -335,7 +334,7 @@ external_resume_outer(concurrency::pool::ThreadPool<TQ> &t) {
   co_return result;
 }
 
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 void test_external_resume_continuation() {
   TEST("external resume continuation");
 
@@ -350,7 +349,7 @@ void test_external_resume_continuation() {
 //////////////////////////////////////////////
 
 // --- Chain of multiple awaits, each scheduling ---
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, void>
 chain_step(concurrency::pool::ThreadPool<TQ> &t, int depth, int &counter) {
@@ -363,7 +362,7 @@ chain_step(concurrency::pool::ThreadPool<TQ> &t, int depth, int &counter) {
   }
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_chain_of_awaits() {
+template <concurrency::queues::Queue TQ> void test_chain_of_awaits() {
   TEST("chain of awaits");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -383,7 +382,7 @@ template <concurrency::queues::TaskQueue TQ> void test_chain_of_awaits() {
 // inner coroutine that also schedules. The outer coroutine must resume on
 // the pool. We can capture `isPoolWorker` during the outer resume using a
 // small helper.
-template <concurrency::queues::TaskQueue TQ>
+template <concurrency::queues::Queue TQ>
 concurrency::pool::coroutine::CoroutineTask<
     TQ, concurrency::pool::coroutine::policy::Suspend::Always, void>
 capture_resume_worker_flag(concurrency::pool::ThreadPool<TQ> &t,
@@ -400,8 +399,7 @@ capture_resume_worker_flag(concurrency::pool::ThreadPool<TQ> &t,
   co_return;
 }
 
-template <concurrency::queues::TaskQueue TQ>
-void test_continuation_runs_on_pool() {
+template <concurrency::queues::Queue TQ> void test_continuation_runs_on_pool() {
   TEST("continuation runs on pool");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -416,7 +414,7 @@ void test_continuation_runs_on_pool() {
 
 //////////////////////////////////////////////
 
-template <concurrency::queues::TaskQueue TQ> static void tests() {
+template <concurrency::queues::Queue TQ> static void tests() {
   test_void_always<TQ>();
   test_value_always<TQ>();
 
@@ -438,7 +436,7 @@ template <concurrency::queues::TaskQueue TQ> static void tests() {
   test_continuation_runs_on_pool<TQ>();
 };
 
-template <concurrency::queues::TaskQueue TQ> static void ex(uint32_t repeats) {
+template <concurrency::queues::Queue TQ> static void ex(uint32_t repeats) {
   {
     std::lock_guard lock(log_mutex);
     std::println("Started id: {}", std::this_thread::get_id());
@@ -453,12 +451,12 @@ int main() {
   std::array<std::jthread, 5> threads;
 
   std::ranges::for_each(threads, [](std::jthread &th) {
-    th = std::jthread(ex<concurrency::queues::FifoTaskQueue>, 100);
+    th = std::jthread(ex<concurrency::queues::Fifo>, 100);
   });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex<concurrency::queues::FifoTaskQueue>(100);
+  ex<concurrency::queues::Fifo>(100);
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

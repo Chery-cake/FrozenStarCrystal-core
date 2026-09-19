@@ -12,7 +12,7 @@ import :state;
 
 export namespace concurrency::pool::coroutine {
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline void schedule_continuation(const SharedHandle<TQ> &state, TQ *queue) {
   if (!state) {
     return;
@@ -55,16 +55,16 @@ inline void schedule_continuation(const SharedHandle<TQ> &state, TQ *queue) {
   }
 };
 
-template <typename T, queues::TaskQueue TQ,
-          template <queues::TaskQueue, policy::Suspend, typename> class Task,
+template <typename T, queues::Queue TQ,
+          template <queues::Queue, policy::Suspend, typename> class Task,
           policy::Suspend SP>
 struct promise_type;
 
 // Trait and concept
 template <typename T> struct is_promise_type : std::false_type {};
 
-template <typename T, queues::TaskQueue TQ,
-          template <queues::TaskQueue, policy::Suspend, typename> class Task,
+template <typename T, queues::Queue TQ,
+          template <queues::Queue, policy::Suspend, typename> class Task,
           policy::Suspend SP>
 struct is_promise_type<promise_type<T, TQ, Task, SP>> : std::true_type {};
 
@@ -72,7 +72,7 @@ template <typename T>
 concept PromiseType = is_promise_type<T>::value;
 
 // Final suspend
-template <PromiseType promise, queues::TaskQueue TQ>
+template <PromiseType promise, queues::Queue TQ>
 struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   promise &p;
 
@@ -127,8 +127,8 @@ struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   void await_resume() const noexcept {}
 };
 
-template <typename T, queues::TaskQueue TQ,
-          template <queues::TaskQueue, policy::Suspend, typename> class Task,
+template <typename T, queues::Queue TQ,
+          template <queues::Queue, policy::Suspend, typename> class Task,
           policy::Suspend SP>
 struct FROZENSTARCRYSTAL_CORE_API promise_type {
   std::optional<T> result;
@@ -171,8 +171,8 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type {
   void unhandled_exception() noexcept { exception = std::current_exception(); }
 };
 
-template <queues::TaskQueue TQ,
-          template <queues::TaskQueue, policy::Suspend, typename> class Task,
+template <queues::Queue TQ,
+          template <queues::Queue, policy::Suspend, typename> class Task,
           policy::Suspend SP>
 struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Task, SP> {
   std::exception_ptr exception;
@@ -209,8 +209,8 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Task, SP> {
   void unhandled_exception() noexcept { exception = std::current_exception(); }
 };
 
-template <typename T, queues::TaskQueue TQ,
-          template <queues::TaskQueue, policy::Suspend, typename> class Task,
+template <typename T, queues::Queue TQ,
+          template <queues::Queue, policy::Suspend, typename> class Task,
           policy::Suspend SP>
 struct FROZENSTARCRYSTAL_CORE_API awaiter {
   SharedHandle<TQ> handle_;

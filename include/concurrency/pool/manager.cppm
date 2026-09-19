@@ -16,21 +16,21 @@ export namespace concurrency::pool {
 
 struct FROZENSTARCRYSTAL_CORE_API Pool {
   std::string name;
-  queues::QueueBehaviour queueBehaviour = queues::QueueBehaviour::Consuming;
+  queues::Behaviour queueBehaviour = queues::Behaviour::Consuming;
 
   constexpr auto operator<=>(const Pool &) const noexcept = default;
 };
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 using PoolRegistry =
     resource::Registry<Pool, ThreadPool<TQ>,
                        resource::SharedPtrPolicy<Pool, ThreadPool<TQ>>>;
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 using PoolSignal = signals::Signals<void(const Pool *, ThreadPool<TQ> *)>;
 using ResizeSignal = signals::Signals<void(const Pool *, size_t, size_t)>;
 
-template <queues::TaskQueue TQ> class FROZENSTARCRYSTAL_CORE_API Manager {
+template <queues::Queue TQ> class FROZENSTARCRYSTAL_CORE_API Manager {
 private:
   PoolRegistry<TQ> registry_;
 

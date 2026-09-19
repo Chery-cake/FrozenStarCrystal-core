@@ -13,7 +13,7 @@ import :structs;
 
 export namespace concurrency::pool::coroutine {
 
-template <queues::TaskQueue TQ, policy::Suspend SP, typename T>
+template <queues::Queue TQ, policy::Suspend SP, typename T>
 class FROZENSTARCRYSTAL_CORE_API CoroutineTask {
 public:
   // Use the standalone promise_type and awaiter

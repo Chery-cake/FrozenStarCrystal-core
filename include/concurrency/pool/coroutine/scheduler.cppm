@@ -17,7 +17,7 @@ export namespace concurrency::pool::coroutine {
 
 inline thread_local bool isPoolWorker = false;
 
-template <queues::TaskQueue TQ, policy::Queue QP>
+template <queues::Queue TQ, policy::Queue QP>
 struct FROZENSTARCRYSTAL_CORE_API Scheduler {
 private:
   TQ &queue_;

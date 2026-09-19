@@ -5,7 +5,7 @@ constexpr concurrency::pool::Pool p1("p1");
 constexpr concurrency::pool::Pool p2("p2");
 constexpr concurrency::pool::Pool p3("p3");
 
-template <concurrency::queues::TaskQueue TQ> void test_create() {
+template <concurrency::queues::Queue TQ> void test_create() {
   TEST("create");
 
   concurrency::pool::Manager<TQ> m;
@@ -42,7 +42,7 @@ template <concurrency::queues::TaskQueue TQ> void test_create() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_signals() {
+template <concurrency::queues::Queue TQ> void test_signals() {
   TEST("signals");
 
   concurrency::pool::Manager<TQ> m;
@@ -89,14 +89,14 @@ template <concurrency::queues::TaskQueue TQ> void test_signals() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> static void tests() {
+template <concurrency::queues::Queue TQ> static void tests() {
   std::ranges::for_each(std::views::iota(0, 10), [](uint32_t) {
     test_create<TQ>();
     test_signals<TQ>();
   });
 };
 
-template <concurrency::queues::TaskQueue TQ> static void ex() {
+template <concurrency::queues::Queue TQ> static void ex() {
   {
     std::lock_guard lock(log_mutex);
     std::println("Started id: {}", std::this_thread::get_id());
@@ -110,12 +110,12 @@ int main() {
   std::array<std::jthread, 5> threads;
 
   std::ranges::for_each(threads, [](std::jthread &th) {
-    th = std::jthread(ex<concurrency::queues::FifoTaskQueue>);
+    th = std::jthread(ex<concurrency::queues::Fifo>);
   });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex<concurrency::queues::FifoTaskQueue>();
+  ex<concurrency::queues::Fifo>();
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

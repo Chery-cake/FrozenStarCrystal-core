@@ -10,7 +10,7 @@ import :manager;
 
 export namespace concurrency::pool {
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline bool Manager<TQ>::createPool(const Pool *tag, size_t num_threads) {
   std::unique_lock lock(mutex_);
   // registry_.emplace returns false if tag already exists
@@ -28,7 +28,7 @@ inline bool Manager<TQ>::createPool(const Pool *tag, size_t num_threads) {
   return added;
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline bool Manager<TQ>::removePool(const Pool *tag) {
   std::unique_lock lock(mutex_);
 
@@ -42,7 +42,7 @@ inline bool Manager<TQ>::removePool(const Pool *tag) {
   return registry_.remove(tag);  // registry remove also triggers its own signal
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline bool Manager<TQ>::split(const Pool *source, const Pool *new_tag,
                                size_t threads_to_extract) {
   std::unique_lock lock(mutex_);
@@ -62,12 +62,12 @@ inline bool Manager<TQ>::split(const Pool *source, const Pool *new_tag,
   return createPool(new_tag, threads_to_extract);
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline std::weak_ptr<ThreadPool<TQ>> Manager<TQ>::getPool(const Pool *tag) {
   return {registry_.getStored(tag)};
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline bool Manager<TQ>::resizePool(const Pool *tag, size_t new_size) {
   std::unique_lock lock(mutex_);
 

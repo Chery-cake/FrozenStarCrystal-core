@@ -9,7 +9,7 @@ import concurrency.pool.coroutine;
 
 export namespace concurrency::pool {
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline ThreadPool<TQ>::ThreadPool(size_t num_threads) {
   queue_ = std::make_unique<TQ>();
 
@@ -26,7 +26,7 @@ inline ThreadPool<TQ>::ThreadPool(size_t num_threads) {
       });
 }
 
-template <queues::TaskQueue TQ> inline ThreadPool<TQ>::~ThreadPool() {
+template <queues::Queue TQ> inline ThreadPool<TQ>::~ThreadPool() {
   {
     std::unique_lock lock(mtx_);
     std::ranges::for_each(threads_, [](std::jthread &t) { t.request_stop(); });
@@ -38,7 +38,7 @@ template <queues::TaskQueue TQ> inline ThreadPool<TQ>::~ThreadPool() {
   threads_.clear();
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline void ThreadPool<TQ>::worker_loop(const std::stop_token &stoken,
                                         TQ &queue) {
   struct WorkerGuard {
@@ -55,7 +55,7 @@ inline void ThreadPool<TQ>::worker_loop(const std::stop_token &stoken,
   }
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 template <typename F>
   requires std::is_invocable_v<F>
 void ThreadPool<TQ>::submit_detach(F &&f) {
@@ -87,7 +87,7 @@ void ThreadPool<TQ>::submit_detach(F &&f) {
   }
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 template <typename F, typename... Args>
   requires std::is_invocable_v<F, Args...>
 std::future<std::invoke_result_t<F, Args...>>
@@ -105,19 +105,19 @@ ThreadPool<TQ>::submit(F &&f, Args &&...args) {
   return fut;
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 template <coroutine::policy::Queue QP>
 inline coroutine::Scheduler<TQ, QP> ThreadPool<TQ>::schedule() noexcept {
   return coroutine::Scheduler<TQ, QP>(*queue_);
 }
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 template <coroutine::policy::Queue QP>
 inline coroutine::Scheduler<TQ, QP>
 ThreadPool<TQ>::schedule(TQ *queue) noexcept {
   return coroutine::Scheduler<TQ, QP>(*queue);
 }
 
-template <queues::TaskQueue TQ>
+template <queues::Queue TQ>
 inline void ThreadPool<TQ>::resize(size_t new_size) {
   std::unique_lock lock(mtx_);
   size_t current = threads_.size();

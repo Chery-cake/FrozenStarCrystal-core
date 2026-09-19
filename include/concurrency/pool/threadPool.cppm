@@ -11,7 +11,7 @@ import concurrency.pool.coroutine;
 
 export namespace concurrency::pool {
 
-template <queues::TaskQueue TQ> class FROZENSTARCRYSTAL_CORE_API ThreadPool {
+template <queues::Queue TQ> class FROZENSTARCRYSTAL_CORE_API ThreadPool {
 private:
   std::unique_ptr<TQ> queue_;
   std::vector<std::jthread> threads_;

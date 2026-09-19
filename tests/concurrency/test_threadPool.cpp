@@ -1,7 +1,7 @@
 #include <cassert>
 import concurrency_helper;
 
-template <concurrency::queues::TaskQueue TQ> void test_create() {
+template <concurrency::queues::Queue TQ> void test_create() {
   TEST("create");
 
   concurrency::pool::ThreadPool<TQ> t{};
@@ -20,7 +20,7 @@ template <concurrency::queues::TaskQueue TQ> void test_create() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_submit() {
+template <concurrency::queues::Queue TQ> void test_submit() {
   TEST("submit");
 
   concurrency::pool::ThreadPool<TQ> t{};
@@ -73,7 +73,7 @@ template <concurrency::queues::TaskQueue TQ> void test_submit() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_wait_empty() {
+template <concurrency::queues::Queue TQ> void test_wait_empty() {
   TEST("wait empty");
 
   concurrency::pool::ThreadPool<TQ> t(2);
@@ -85,8 +85,7 @@ template <concurrency::queues::TaskQueue TQ> void test_wait_empty() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ>
-void test_wait_for_submit_detach() {
+template <concurrency::queues::Queue TQ> void test_wait_for_submit_detach() {
   TEST("wait for submit_detach");
 
   concurrency::pool::ThreadPool<TQ> t(4);
@@ -107,7 +106,7 @@ void test_wait_for_submit_detach() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_wait_with_futures() {
+template <concurrency::queues::Queue TQ> void test_wait_with_futures() {
   TEST("wait with futures");
 
   concurrency::pool::ThreadPool<TQ> t{4};
@@ -130,7 +129,7 @@ template <concurrency::queues::TaskQueue TQ> void test_wait_with_futures() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> void test_wait_repeated() {
+template <concurrency::queues::Queue TQ> void test_wait_repeated() {
   TEST("wait repeated");
 
   concurrency::pool::ThreadPool<TQ> t{4};
@@ -149,8 +148,7 @@ template <concurrency::queues::TaskQueue TQ> void test_wait_repeated() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ>
-void test_wait_concurrent_submit() {
+template <concurrency::queues::Queue TQ> void test_wait_concurrent_submit() {
   TEST("wait concurrent submit");
 
   concurrency::pool::ThreadPool<TQ> t{4};
@@ -181,8 +179,7 @@ void test_wait_concurrent_submit() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ>
-void test_wait_from_worker_throws() {
+template <concurrency::queues::Queue TQ> void test_wait_from_worker_throws() {
   TEST("wait from worker throws");
 
   concurrency::pool::ThreadPool<TQ> t{2};
@@ -203,7 +200,7 @@ void test_wait_from_worker_throws() {
   PASS();
 }
 
-template <concurrency::queues::TaskQueue TQ> static void tests() {
+template <concurrency::queues::Queue TQ> static void tests() {
   std::ranges::for_each(std::views::iota(0, 25), [](uint32_t) {
     test_create<TQ>();
     test_submit<TQ>();
@@ -217,7 +214,7 @@ template <concurrency::queues::TaskQueue TQ> static void tests() {
   });
 };
 
-template <concurrency::queues::TaskQueue TQ> static void ex() {
+template <concurrency::queues::Queue TQ> static void ex() {
   {
     std::lock_guard lock(log_mutex);
     std::println("Started id: {}", std::this_thread::get_id());
@@ -231,12 +228,12 @@ int main() {
   std::array<std::jthread, 5> threads;
 
   std::ranges::for_each(threads, [](std::jthread &th) {
-    th = std::jthread(ex<concurrency::queues::FifoTaskQueue>);
+    th = std::jthread(ex<concurrency::queues::Fifo>);
   });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex<concurrency::queues::FifoTaskQueue>();
+  ex<concurrency::queues::Fifo>();
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

@@ -2,16 +2,46 @@ module;
 
 #include "FrozenStarCrystal-core_export.h"
 
-export module concurrency.queues:fifo;
+export module concurrency.queues:priority;
 
 import std.compat;
 import :queue;
 
+namespace concurrency::queues {
+
+template <typename E>
+concept TaskEntry = requires(E e, const E ce) {
+  { e.task } -> std::same_as<Task &>;
+  { ce.task } -> std::same_as<const Task &>;
+};
+
+// std::priority_queue's container requirements, restricted to Entry.
+template <typename C, typename E>
+concept PriorityContainer = requires(C c, const C &cc, E e) {
+  typename C::value_type;
+  requires std::same_as<typename C::value_type, E>;
+  requires std::random_access_iterator<typename C::iterator>;
+  { c.push_back(std::move(e)) };
+  { c.pop_back() };
+  { cc.back() } -> std::same_as<const E &>;
+};
+
+template <typename Cmp, typename E>
+concept EntryComparator = requires(Cmp cmp, const E &a, const E &b) {
+  { cmp(a, b) } -> std::convertible_to<bool>;
+};
+
+} // namespace concurrency::queues
+
 export namespace concurrency::queues {
 
-struct FROZENSTARCRYSTAL_CORE_API Fifo {
+template <TaskEntry Entry, PriorityContainer<Entry> Container,
+          EntryComparator<Entry> Compare>
+struct FROZENSTARCRYSTAL_CORE_API Priority {
 private:
-  std::queue<Task> queue;
+  Container queue;
+  Compare cmp;
+
   mutable std::mutex mutex;
   std::counting_semaphore<> permits{0};
 
@@ -19,10 +49,11 @@ private:
   std::atomic<uint64_t> wake{0};
 
 public:
-  void push(Task t) {
+  void push(Entry e) {
     {
       std::scoped_lock lock(mutex);
-      queue.push(std::move(t));
+      queue.push_back(std::move(e));
+      std::ranges::push_heap(queue, cmp);
     }
     size.fetch_add(1, std::memory_order_release);
     wake.fetch_add(1, std::memory_order_release);
@@ -38,8 +69,9 @@ public:
       if (size.load(std::memory_order_relaxed) != 0 && permits.try_acquire()) {
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
-          t = std::move(queue.front());
-          queue.pop();
+          std::ranges::pop_heap(queue, cmp);
+          t = std::move(queue.back().task);
+          queue.pop_back();
           lock.unlock();
           size.fetch_sub(1, std::memory_order_release);
           return true;
@@ -53,8 +85,9 @@ public:
       if (stoken.stop_requested()) {
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
-          t = std::move(queue.front());
-          queue.pop();
+          std::ranges::pop_heap(queue, cmp);
+          t = std::move(queue.back().task);
+          queue.pop_back();
           lock.unlock();
           size.fetch_sub(1, std::memory_order_release);
           permits.try_acquire(); // consume the permit the fast path
