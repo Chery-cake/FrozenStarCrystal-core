@@ -29,9 +29,11 @@ concept Consuming =
 
 template <typename Q, typename Pushed>
 concept Looping =
-    Base<Q, Pushed> && requires(Q &q, Task &t, const std::stop_token &st) {
+    Base<Q, Pushed> && requires(Q &q, std::weak_ptr<Task> &t,
+                                const std::stop_token &st, size_t i) {
       { q.peek(t, st) } -> std::same_as<bool>;
       { q.clear() } -> std::same_as<void>;
+      { q.remove(i) } -> std::same_as<bool>;
     };
 
 } // namespace concurrency::queues
