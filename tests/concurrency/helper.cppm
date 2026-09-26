@@ -57,4 +57,20 @@ export {
 
     void await_resume() {}
   };
+
+  struct PriorityEntry {
+    concurrency::queues::Task task;
+    int priority = 0;
+  };
+
+  struct PriorityCompare {
+    bool operator()(const PriorityEntry &a,
+                    const PriorityEntry &b) const noexcept {
+      return a.priority < b.priority;
+    }
+  };
+
+  using PriorityQueue =
+      concurrency::queues::Priority<PriorityEntry, std::vector<PriorityEntry>,
+                                    PriorityCompare>;
 }

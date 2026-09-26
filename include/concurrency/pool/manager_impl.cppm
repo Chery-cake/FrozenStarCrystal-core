@@ -10,26 +10,29 @@ import :manager;
 
 export namespace concurrency::pool {
 
-template <queues::Queue TQ>
-inline bool Manager<TQ>::createPool(const Pool *tag, size_t num_threads) {
+template <typename TQ, typename Pushed = queues::Task,
+          queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+inline bool Manager::createPool(const Pool *tag, size_t num_threads) {
   std::unique_lock lock(mutex_);
   // registry_.emplace returns false if tag already exists
   size_t threads =
       num_threads == 0 ? std::thread::hardware_concurrency() : num_threads;
 
-  bool added = registry_.emplace(tag, threads);
+  auto pool = std::make_shared<ThreadPool<TQ, Pushed, Behaviour>>(threads);
+
+  bool added = registry_.add(tag, std::move(pool));
   if (added) {
     // Retrieve the freshly created pool and notify listeners
-    if (auto *pool = registry_.get(tag)) {
-      onPoolAdded.emit(tag, pool);
+    if (auto *raw = registry_.get(tag)) {
+      onPoolAdded.emit(tag, raw);
     }
   }
 
   return added;
 }
 
-template <queues::Queue TQ>
-inline bool Manager<TQ>::removePool(const Pool *tag) {
+inline bool Manager::removePool(const Pool *tag) {
   std::unique_lock lock(mutex_);
 
   // First get the pool pointer for the signal
@@ -42,33 +45,7 @@ inline bool Manager<TQ>::removePool(const Pool *tag) {
   return registry_.remove(tag);  // registry remove also triggers its own signal
 }
 
-template <queues::Queue TQ>
-inline bool Manager<TQ>::split(const Pool *source, const Pool *new_tag,
-                               size_t threads_to_extract) {
-  std::unique_lock lock(mutex_);
-
-  ThreadPool<TQ> *src_pool = registry_.get(source);
-  if (src_pool == nullptr || src_pool->size() <= threads_to_extract) {
-    return false;
-  }
-
-  size_t old_size = src_pool->size();
-  // Reduce source pool – this emits the resized signal via resizePool()
-  if (!resizePool(source, old_size - threads_to_extract)) {
-    return false;
-  }
-
-  // Create the new pool – createPool will emit onPoolAdded
-  return createPool(new_tag, threads_to_extract);
-}
-
-template <queues::Queue TQ>
-inline std::weak_ptr<ThreadPool<TQ>> Manager<TQ>::getPool(const Pool *tag) {
-  return {registry_.getStored(tag)};
-}
-
-template <queues::Queue TQ>
-inline bool Manager<TQ>::resizePool(const Pool *tag, size_t new_size) {
+inline bool Manager::resizePool(const Pool *tag, size_t new_size) {
   std::unique_lock lock(mutex_);
 
   auto *pool = registry_.get(tag);
@@ -80,6 +57,28 @@ inline bool Manager<TQ>::resizePool(const Pool *tag, size_t new_size) {
   pool->resize(new_size);
   onPoolResized.emit(tag, old_size, new_size);
   return true;
+}
+
+template <typename TQ, typename Pushed = queues::Task,
+          queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+inline bool Manager::split(const Pool *source, const Pool *new_tag,
+                           size_t threads_to_extract) {
+  std::unique_lock lock(mutex_);
+
+  ThreadPoolBase *src_pool = registry_.get(source);
+  if (src_pool == nullptr || src_pool->size() <= threads_to_extract) {
+    return false;
+  }
+
+  size_t old_size = src_pool->size();
+  // Reduce source pool – this emits the resized signal via resizePool()
+  if (!resizePool(source, old_size - threads_to_extract)) {
+    return false;
+  }
+
+  // Create the new pool – createPool will emit onPoolAdded
+  return createPool<TQ, Pushed, Behaviour>(new_tag, threads_to_extract);
 }
 
 } // namespace concurrency::pool

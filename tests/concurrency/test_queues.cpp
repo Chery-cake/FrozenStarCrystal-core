@@ -56,23 +56,6 @@ void test_fifo() {
   PASS();
 }
 
-// ─── Test entry, comparator, and queue alias ────────────────────────────
-struct PriorityEntry {
-  int priority;
-  concurrency::queues::Task task;
-};
-
-struct PriorityCompare {
-  bool operator()(const PriorityEntry &a,
-                  const PriorityEntry &b) const noexcept {
-    return a.priority < b.priority; // max-heap on `priority`
-  }
-};
-
-using PriorityQueue =
-    concurrency::queues::Priority<PriorityEntry, std::vector<PriorityEntry>,
-                                  PriorityCompare>;
-
 // ─── Runtime tests ──────────────────────────────────────────────────────
 
 void test_priority_order() {
@@ -85,10 +68,10 @@ void test_priority_order() {
   std::vector<int> order;
 
   // Pushed out of order on purpose.
-  queue.push(PriorityEntry{1, [&order] { order.push_back(1); }});
-  queue.push(PriorityEntry{5, [&order] { order.push_back(5); }});
-  queue.push(PriorityEntry{3, [&order] { order.push_back(3); }});
-  queue.push(PriorityEntry{7, [&order] { order.push_back(7); }});
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+  queue.push(PriorityEntry{[&order] { order.push_back(5); }, 5});
+  queue.push(PriorityEntry{[&order] { order.push_back(3); }, 3});
+  queue.push(PriorityEntry{[&order] { order.push_back(7); }, 7});
 
   concurrency::queues::Task t;
   for (int i = 0; i < 4; ++i) {
@@ -116,10 +99,10 @@ void test_priority_duplicates() {
 
   // Three items at priority 5 (order among them is unspecified — the
   // heap isn't stable), one at priority 1.
-  queue.push(PriorityEntry{5, [&count] { count.fetch_add(1); }});
-  queue.push(PriorityEntry{5, [&count] { count.fetch_add(2); }});
-  queue.push(PriorityEntry{5, [&count] { count.fetch_add(4); }});
-  queue.push(PriorityEntry{1, [&count] { count.fetch_add(100); }});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(1); }, 5});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(2); }, 5});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(4); }, 5});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(100); }, 1});
 
   concurrency::queues::Task t;
 
@@ -150,9 +133,9 @@ void test_priority_thread() {
 
   std::atomic<int> count{0};
 
-  queue.push(PriorityEntry{1, [&count] { count.fetch_add(1); }});
-  queue.push(PriorityEntry{2, [&count] { count.fetch_add(2); }});
-  queue.push(PriorityEntry{3, [&count] { count.fetch_add(3); }});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(1); }, 1});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(2); }, 2});
+  queue.push(PriorityEntry{[&count] { count.fetch_add(3); }, 3});
 
   // Worker pops the highest-priority task (3) and runs it.
   std::jthread jt([&queue, &st] {
@@ -188,9 +171,9 @@ void test_priority_stop_drain() {
 
   std::vector<int> order;
 
-  queue.push(PriorityEntry{1, [&order] { order.push_back(1); }});
-  queue.push(PriorityEntry{3, [&order] { order.push_back(3); }});
-  queue.push(PriorityEntry{2, [&order] { order.push_back(2); }});
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+  queue.push(PriorityEntry{[&order] { order.push_back(3); }, 3});
+  queue.push(PriorityEntry{[&order] { order.push_back(2); }, 2});
 
   // Request stop BEFORE draining: try_pop must still hand out queued
   // items, in priority order, before returning false.
@@ -219,7 +202,7 @@ void test_priority_empty() {
 
   assert(queue.empty());
 
-  queue.push(PriorityEntry{1, [] {}});
+  queue.push(PriorityEntry{[] {}, 1});
   assert(!queue.empty());
 
   concurrency::queues::Task t;
@@ -242,7 +225,7 @@ void test_priority_many() {
 
   // Push in reverse so the heap has to do real sift-up work on every push.
   for (int i = kN - 1; i >= 0; --i) {
-    queue.push(PriorityEntry{i, [&order, i] { order.push_back(i); }});
+    queue.push(PriorityEntry{[&order, i] { order.push_back(i); }, i});
   }
 
   concurrency::queues::Task t;
@@ -279,11 +262,10 @@ void test_loop_round_robin() {
   queue.push([&order] { order.push_back(2); });
   queue.push([&order] { order.push_back(3); });
 
-  std::weak_ptr<concurrency::queues::Task> wp;
+  std::shared_ptr<concurrency::queues::Task> sp;
   for (int round = 0; round < 3; ++round) {
     for (int i = 0; i < 3; ++i) {
-      assert(queue.peek(wp, st));
-      auto sp = wp.lock();
+      assert(queue.peek(sp, st));
       assert(sp);
       (*sp)();
     }
@@ -293,7 +275,7 @@ void test_loop_round_robin() {
   assert((order == std::vector<int>{1, 2, 3, 1, 2, 3, 1, 2, 3}));
 
   ss.request_stop();
-  assert(!queue.peek(wp, st));
+  assert(!queue.peek(sp, st));
 
   PASS();
 }
@@ -308,18 +290,17 @@ void test_loop_single() {
   std::atomic<int> count{0};
   queue.push([&count] { count.fetch_add(1); });
 
-  std::weak_ptr<concurrency::queues::Task> wp;
+  std::shared_ptr<concurrency::queues::Task> sp;
   // The same slot is peeked every time — cursor wraps at size 1.
   for (int i = 0; i < 5; ++i) {
-    assert(queue.peek(wp, st));
-    auto sp = wp.lock();
+    assert(queue.peek(sp, st));
     assert(sp);
     (*sp)();
   }
   assert(count.load() == 5);
 
   ss.request_stop();
-  assert(!queue.peek(wp, st));
+  assert(!queue.peek(sp, st));
 
   PASS();
 }
@@ -333,10 +314,10 @@ void test_loop_empty() {
 
   assert(queue.empty());
 
-  std::weak_ptr<concurrency::queues::Task> wp;
+  std::shared_ptr<concurrency::queues::Task> sp;
   // Empty queue + stop requested → false immediately.
   ss.request_stop();
-  assert(!queue.peek(wp, st));
+  assert(!queue.peek(sp, st));
 
   PASS();
 }
@@ -361,24 +342,24 @@ void test_loop_clear() {
   queue.push([&order] { order.push_back(10); });
   queue.push([&order] { order.push_back(20); });
 
-  std::weak_ptr<concurrency::queues::Task> wp;
+  std::shared_ptr<concurrency::queues::Task> sp;
 
   // Drain both entries before stopping. Loop's stop is immediate,
   // not drain-on-stop — the stop token only takes effect at the top
   // of peek(), so both peeks must happen first.
-  assert(queue.peek(wp, st));
-  (*wp.lock())();
+  assert(queue.peek(sp, st));
+  (*sp)();
   assert(order == std::vector<int>{10});
 
-  assert(queue.peek(wp, st));
-  (*wp.lock())();
+  assert(queue.peek(sp, st));
+  (*sp)();
   assert((order == std::vector<int>{10, 20}));
 
   // Now stop: peek must return false regardless of remaining entries
   // (there are none here, but the point is that stop short-circuits
   // before any fast-path attempt).
   ss.request_stop();
-  assert(!queue.peek(wp, st));
+  assert(!queue.peek(sp, st));
 
   PASS();
 }
@@ -401,10 +382,10 @@ void test_loop_remove() {
   assert(!queue.remove(999));
 
   // Drain the two remaining entries; task 1 must never have run.
-  std::weak_ptr<concurrency::queues::Task> wp;
+  std::shared_ptr<concurrency::queues::Task> sp;
   for (int i = 0; i < 2; ++i) {
-    assert(queue.peek(wp, st));
-    (*wp.lock())();
+    assert(queue.peek(sp, st));
+    (*sp)();
   }
   assert(hits[0].load() == 1);
   assert(hits[1].load() == 0);
@@ -417,7 +398,7 @@ void test_loop_remove() {
   assert(queue.empty());
 
   ss.request_stop();
-  assert(!queue.peek(wp, st));
+  assert(!queue.peek(sp, st));
 
   PASS();
 }
@@ -433,18 +414,18 @@ void test_loop_stop_drain() {
   queue.push([&hits] { hits.fetch_add(1); });
   queue.push([&hits] { hits.fetch_add(10); });
 
-  std::weak_ptr<concurrency::queues::Task> wp;
+  std::shared_ptr<concurrency::queues::Task> sp;
 
   // Before stop: peek succeeds and hands out tasks.
-  assert(queue.peek(wp, st));
-  (*wp.lock())();
+  assert(queue.peek(sp, st));
+  (*sp)();
   assert(hits.load() == 1);
 
   // Request stop. Entries are still in the queue — Loop never consumes
   // them — but peek must now return false unconditionally.
   ss.request_stop();
 
-  assert(!queue.peek(wp, st));
+  assert(!queue.peek(sp, st));
   assert(!queue.empty());   // entries persist; stop doesn't clear
   assert(hits.load() == 1); // nothing new ran
 
@@ -470,10 +451,9 @@ void test_loop_concurrent_distinct() {
   std::array<std::jthread, kN> threads;
   for (int i = 0; i < kN; ++i) {
     threads[i] = std::jthread([&queue, &st] {
-      std::weak_ptr<concurrency::queues::Task> wp;
-      assert(queue.peek(wp, st));
-      if (auto sp = wp.lock())
-        (*sp)();
+      std::shared_ptr<concurrency::queues::Task> sp;
+      assert(queue.peek(sp, st));
+      (*sp)();
     });
   }
   for (auto &t : threads)
@@ -484,30 +464,6 @@ void test_loop_concurrent_distinct() {
   }
 
   ss.request_stop();
-  PASS();
-}
-
-void test_loop_weak_expires() {
-  TEST("loop weak expires after clear");
-
-  concurrency::queues::Loop queue;
-  std::stop_source ss;
-  auto st = ss.get_token();
-
-  queue.push([] {});
-
-  std::weak_ptr<concurrency::queues::Task> wp;
-  assert(queue.peek(wp, st));
-  assert(!wp.expired());
-
-  // Clear drops the only shared_ptr; the weak ref must expire.
-  queue.clear();
-  assert(wp.expired());
-
-  assert(queue.empty());
-  ss.request_stop();
-  assert(!queue.peek(wp, st));
-
   PASS();
 }
 
@@ -532,7 +488,6 @@ int main() {
       test_loop_remove();
       test_loop_stop_drain();
       test_loop_concurrent_distinct();
-      test_loop_weak_expires();
     });
   };
 

@@ -9,8 +9,9 @@ import concurrency.pool.coroutine;
 
 export namespace concurrency::pool {
 
-template <queues::Queue TQ>
-inline ThreadPool<TQ>::ThreadPool(size_t num_threads) {
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+inline ThreadPool<TQ, Pushed, Behaviour>::ThreadPool(size_t num_threads) {
   queue_ = std::make_unique<TQ>();
 
   size_t threads =
@@ -26,7 +27,9 @@ inline ThreadPool<TQ>::ThreadPool(size_t num_threads) {
       });
 }
 
-template <queues::Queue TQ> inline ThreadPool<TQ>::~ThreadPool() {
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+inline ThreadPool<TQ, Pushed, Behaviour>::~ThreadPool() {
   {
     std::unique_lock lock(mtx_);
     std::ranges::for_each(threads_, [](std::jthread &t) { t.request_stop(); });
@@ -38,31 +41,45 @@ template <queues::Queue TQ> inline ThreadPool<TQ>::~ThreadPool() {
   threads_.clear();
 }
 
-template <queues::Queue TQ>
-inline void ThreadPool<TQ>::worker_loop(const std::stop_token &stoken,
-                                        TQ &queue) {
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+inline void
+ThreadPool<TQ, Pushed, Behaviour>::worker_loop(const std::stop_token &stoken,
+                                               TQ &queue) {
   struct WorkerGuard {
     ~WorkerGuard() { coroutine::isPoolWorker = false; }
 
   } guard;
   coroutine::isPoolWorker = true;
 
-  queues::Task task;
-  while (queue.try_pop(task, stoken)) {
-    if (task) {
-      task();
+  if constexpr (Behaviour == queues::Behaviour::Consuming) {
+    queues::Task task;
+    while (queue.try_pop(task, stoken)) {
+      if (task) {
+        task();
+      }
+    }
+  } else if constexpr (Behaviour == queues::Behaviour::Looping) {
+    std::shared_ptr<queues::Task> task;
+    while (queue.peek(task, stoken)) {
+      (*task)();
+      task.reset();
     }
   }
 }
 
-template <queues::Queue TQ>
-template <typename F>
-  requires std::is_invocable_v<F>
-void ThreadPool<TQ>::submit_detach(F &&f) {
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+template <typename F, typename... PushArgs>
+  requires std::is_invocable_v<F> && requires(queues::Task t, PushArgs &&...a) {
+    Pushed{std::move(t), std::forward<PushArgs>(a)...};
+  }
+void ThreadPool<TQ, Pushed, Behaviour>::submit_detach(F &&f,
+                                                      PushArgs &&...pushArgs) {
   active_tasks_.fetch_add(1, std::memory_order_relaxed);
 
   try {
-    queue_->push([this, f = std::forward<F>(f)]() mutable {
+    queues::Task wrapped = [this, f = std::forward<F>(f)]() mutable {
       struct Guard {
         ThreadPool *pool;
         ~Guard() { pool->task_finished(); }
@@ -76,7 +93,10 @@ void ThreadPool<TQ>::submit_detach(F &&f) {
         std::println(std::cerr, "submit_detach: task threw unknown exception");
         // TODO handle exceptions
       }
-    });
+    };
+
+    queue_->push(
+        Pushed{std::move(wrapped), std::forward<PushArgs>(pushArgs)...});
   } catch (const std::exception &e) { // TODO make it rethorw the exception
                                       // after decreasing the cunter
     active_tasks_.fetch_sub(1, std::memory_order_relaxed);
@@ -87,11 +107,12 @@ void ThreadPool<TQ>::submit_detach(F &&f) {
   }
 }
 
-template <queues::Queue TQ>
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
 template <typename F, typename... Args>
   requires std::is_invocable_v<F, Args...>
 std::future<std::invoke_result_t<F, Args...>>
-ThreadPool<TQ>::submit(F &&f, Args &&...args) {
+ThreadPool<TQ, Pushed, Behaviour>::submit(F &&f, Args &&...args) {
   using Ret = std::invoke_result_t<F, Args...>;
 
   auto task = std::make_shared<std::packaged_task<Ret()>>(
@@ -105,20 +126,24 @@ ThreadPool<TQ>::submit(F &&f, Args &&...args) {
   return fut;
 }
 
-template <queues::Queue TQ>
-template <coroutine::policy::Queue QP>
-inline coroutine::Scheduler<TQ, QP> ThreadPool<TQ>::schedule() noexcept {
-  return coroutine::Scheduler<TQ, QP>(*queue_);
-}
-template <queues::Queue TQ>
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
 template <coroutine::policy::Queue QP>
 inline coroutine::Scheduler<TQ, QP>
-ThreadPool<TQ>::schedule(TQ *queue) noexcept {
+ThreadPool<TQ, Pushed, Behaviour>::schedule() noexcept {
+  return coroutine::Scheduler<TQ, QP>(*queue_);
+}
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+template <coroutine::policy::Queue QP>
+inline coroutine::Scheduler<TQ, QP>
+ThreadPool<TQ, Pushed, Behaviour>::schedule(TQ *queue) noexcept {
   return coroutine::Scheduler<TQ, QP>(*queue);
 }
 
-template <queues::Queue TQ>
-inline void ThreadPool<TQ>::resize(size_t new_size) {
+template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+  requires(queues::Queue<TQ, Pushed>)
+inline void ThreadPool<TQ, Pushed, Behaviour>::resize(size_t new_size) {
   std::unique_lock lock(mtx_);
   size_t current = threads_.size();
 
@@ -135,8 +160,9 @@ inline void ThreadPool<TQ>::resize(size_t new_size) {
   }
 
   if (new_size < current) {
-    std::ranges::for_each(threads_ | std::views::drop(new_size),
-                          [](std::jthread &t) { t.request_stop(); });
+    std::ranges::for_each(
+        std::views::drop(threads_, static_cast<std::ptrdiff_t>(new_size)),
+        [](std::jthread &t) { t.request_stop(); });
 
     if (queue_) {
       queue_->notify_all();

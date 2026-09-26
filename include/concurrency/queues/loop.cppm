@@ -28,7 +28,7 @@ public:
     wake.notify_all();
   }
 
-  bool peek(std::weak_ptr<Task> &task, const std::stop_token &stoken) {
+  bool peek(std::shared_ptr<Task> &task, const std::stop_token &stoken) {
     std::optional<std::stop_callback<std::function<void()>>> cb;
     while (true) {
       // --- If stopped, exit. ---

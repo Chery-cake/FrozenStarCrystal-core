@@ -30,7 +30,7 @@ private:
   signals::Signals<SignalCall> resourceAdded_;
   signals::Signals<SignalCall> resourceRemoved_;
 
-  mutable std::mutex mutex_;
+  mutable std::recursive_mutex mutex_;
 
 public:
   Registry() = default;

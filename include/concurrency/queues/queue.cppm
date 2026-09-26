@@ -23,13 +23,15 @@ concept Base = requires(Q &q, Pushed &p) {
 // --- Behavior-specific concepts ---
 template <typename Q, typename Pushed>
 concept Consuming =
+    // TODO
+    // change Task to be a unique or shared ptr
     Base<Q, Pushed> && requires(Q &q, Task &t, const std::stop_token &st) {
       { q.try_pop(t, st) } -> std::same_as<bool>;
     };
 
 template <typename Q, typename Pushed>
 concept Looping =
-    Base<Q, Pushed> && requires(Q &q, std::weak_ptr<Task> &t,
+    Base<Q, Pushed> && requires(Q &q, std::shared_ptr<Task> &t,
                                 const std::stop_token &st, size_t i) {
       { q.peek(t, st) } -> std::same_as<bool>;
       { q.clear() } -> std::same_as<void>;
