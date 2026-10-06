@@ -128,21 +128,6 @@ ThreadPool<TQ, Pushed, Behaviour>::submit(F &&f, Args &&...args) {
 
 template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
   requires(queues::Queue<TQ, Pushed>)
-template <coroutine::policy::Queue QP>
-inline coroutine::Scheduler<TQ, QP>
-ThreadPool<TQ, Pushed, Behaviour>::schedule() noexcept {
-  return coroutine::Scheduler<TQ, QP>(*queue_);
-}
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
-  requires(queues::Queue<TQ, Pushed>)
-template <coroutine::policy::Queue QP>
-inline coroutine::Scheduler<TQ, QP>
-ThreadPool<TQ, Pushed, Behaviour>::schedule(TQ *queue) noexcept {
-  return coroutine::Scheduler<TQ, QP>(*queue);
-}
-
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
-  requires(queues::Queue<TQ, Pushed>)
 inline void ThreadPool<TQ, Pushed, Behaviour>::resize(size_t new_size) {
   std::unique_lock lock(mtx_);
   size_t current = threads_.size();

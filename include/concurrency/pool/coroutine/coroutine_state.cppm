@@ -16,9 +16,10 @@ enum class AwaiterState : uint8_t {
   Waiting,     // awaiter suspended
 };
 
-template <queues::Queue TQ>
+template <typename TQ, typename Pushed>
+  requires(queues::Queue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API CoroutineState
-    : std::enable_shared_from_this<CoroutineState<TQ>> {
+    : std::enable_shared_from_this<CoroutineState<TQ, Pushed>> {
 
   std::coroutine_handle<> handle;
 
@@ -30,7 +31,7 @@ struct FROZENSTARCRYSTAL_CORE_API CoroutineState
   // need a mutex
   AwaiterState awaiter_state = AwaiterState::None;
   std::coroutine_handle<> continuation = nullptr; // outer coroutine to resume
-  std::shared_ptr<CoroutineState<TQ>> continuation_state =
+  std::shared_ptr<CoroutineState<TQ, Pushed>> continuation_state =
       nullptr;                                // state of outer coroutine
   std::atomic<TQ *> scheduler_queue{nullptr}; // queue to resume continuation on
 
@@ -65,12 +66,14 @@ struct FROZENSTARCRYSTAL_CORE_API CoroutineState
   }
 };
 
-template <queues::Queue TQ>
-using SharedHandle = std::shared_ptr<CoroutineState<TQ>>;
+template <typename TQ, typename Pushed>
+  requires(queues::Queue<TQ, Pushed>)
+using SharedHandle = std::shared_ptr<CoroutineState<TQ, Pushed>>;
 
-template <queues::Queue TQ>
-inline SharedHandle<TQ> make_shared_handle(std::coroutine_handle<> h) {
-  return std::make_shared<CoroutineState<TQ>>(h);
+template <typename TQ, typename Pushed>
+  requires(queues::Queue<TQ, Pushed>)
+inline SharedHandle<TQ, Pushed> make_shared_handle(std::coroutine_handle<> h) {
+  return std::make_shared<CoroutineState<TQ, Pushed>>(h);
 }
 
 } // namespace concurrency::pool::coroutine

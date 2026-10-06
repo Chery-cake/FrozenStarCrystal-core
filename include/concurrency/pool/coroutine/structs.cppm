@@ -12,14 +12,16 @@ import :state;
 
 export namespace concurrency::pool::coroutine {
 
-template <queues::Queue TQ>
-inline void schedule_continuation(const SharedHandle<TQ> &state, TQ *queue) {
+template <typename TQ, typename Pushed>
+  requires(queues::Queue<TQ, Pushed>)
+inline void schedule_continuation(const SharedHandle<TQ, Pushed> &state,
+                                  TQ *queue) {
   if (!state) {
     return;
   }
 
   std::coroutine_handle<> cont;
-  std::shared_ptr<CoroutineState<TQ>> cont_state;
+  std::shared_ptr<CoroutineState<TQ, Pushed>> cont_state;
 
   {
     std::lock_guard lock(state->mtx);
@@ -46,33 +48,38 @@ inline void schedule_continuation(const SharedHandle<TQ> &state, TQ *queue) {
   }
 
   if (target_queue != nullptr) {
-    target_queue->push([cont_state, target_queue]() mutable {
-      cont_state->do_resume();
-      if (cont_state->done_executing()) {
-        schedule_continuation(cont_state, target_queue);
-      }
-    });
+    target_queue->push(
+        Pushed{queues::Task{[cont_state, target_queue]() mutable {
+          cont_state->do_resume();
+          if (cont_state->done_executing()) {
+            schedule_continuation<TQ, Pushed>(cont_state, target_queue);
+          }
+        }}});
   }
 };
 
-template <typename T, queues::Queue TQ,
-          template <queues::Queue, policy::Suspend, typename> class Task,
+template <typename T, typename TQ, typename Pushed,
+          template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
+  requires(queues::Queue<TQ, Pushed>)
 struct promise_type;
 
 // Trait and concept
 template <typename T> struct is_promise_type : std::false_type {};
 
-template <typename T, queues::Queue TQ,
-          template <queues::Queue, policy::Suspend, typename> class Task,
+template <typename T, typename TQ, typename Pushed,
+          template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-struct is_promise_type<promise_type<T, TQ, Task, SP>> : std::true_type {};
+  requires(queues::Queue<TQ, Pushed>)
+struct is_promise_type<promise_type<T, TQ, Pushed, Task, SP>> : std::true_type {
+};
 
 template <typename T>
 concept PromiseType = is_promise_type<T>::value;
 
 // Final suspend
-template <PromiseType promise, queues::Queue TQ>
+template <PromiseType promise, typename TQ, typename Pushed>
+  requires(queues::Queue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   promise &p;
 
@@ -90,7 +97,7 @@ struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
     state->mark_executed();
 
     std::coroutine_handle<> cont;
-    std::shared_ptr<CoroutineState<TQ>> cont_state;
+    std::shared_ptr<CoroutineState<TQ, Pushed>> cont_state;
 
     {
       std::lock_guard lock(state->mtx);
@@ -109,12 +116,12 @@ struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
 
     TQ *queue = state->scheduler_queue.load(std::memory_order_acquire);
     if (queue != nullptr) {
-      queue->push([cont_state, queue]() {
+      queue->push(Pushed{queues::Task{[cont_state, queue]() {
         cont_state->do_resume();
         if (cont_state->done_executing()) {
           schedule_continuation(cont_state, queue);
         }
-      });
+      }}});
       return std::noop_coroutine();
     }
 
@@ -127,22 +134,23 @@ struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   void await_resume() const noexcept {}
 };
 
-template <typename T, queues::Queue TQ,
-          template <queues::Queue, policy::Suspend, typename> class Task,
+template <typename T, typename TQ, typename Pushed,
+          template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
+  requires(queues::Queue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API promise_type {
   std::optional<T> result;
   std::exception_ptr exception;
-  std::shared_ptr<CoroutineState<TQ>> state = nullptr;
+  std::shared_ptr<CoroutineState<TQ, Pushed>> state = nullptr;
   bool started = false;
 
   // Return type of the coroutine
-  using task_type = Task<TQ, SP, T>;
+  using task_type = Task<TQ, Pushed, SP, T>;
   using handle_type = std::coroutine_handle<promise_type>;
 
   task_type get_return_object() noexcept {
     auto h = handle_type::from_promise(*this);
-    state = make_shared_handle<TQ>(h);
+    state = make_shared_handle<TQ, Pushed>(h);
     if constexpr (SP == policy::Suspend::Never) {
       started = true;
     }
@@ -158,7 +166,7 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type {
     }
   }
   constexpr auto final_suspend() noexcept {
-    return FinalAwaiter<promise_type, TQ>{*this};
+    return FinalAwaiter<promise_type, TQ, Pushed>{*this};
   }
 
   template <typename U>
@@ -171,21 +179,22 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type {
   void unhandled_exception() noexcept { exception = std::current_exception(); }
 };
 
-template <queues::Queue TQ,
-          template <queues::Queue, policy::Suspend, typename> class Task,
+template <typename TQ, typename Pushed,
+          template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Task, SP> {
+  requires(queues::Queue<TQ, Pushed>)
+struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Pushed, Task, SP> {
   std::exception_ptr exception;
-  std::shared_ptr<CoroutineState<TQ>> state = nullptr;
+  std::shared_ptr<CoroutineState<TQ, Pushed>> state = nullptr;
   bool started = false;
 
   // Return type of the coroutine
-  using task_type = Task<TQ, SP, void>;
+  using task_type = Task<TQ, Pushed, SP, void>;
   using handle_type = std::coroutine_handle<promise_type>;
 
   task_type get_return_object() noexcept {
     auto h = handle_type::from_promise(*this);
-    state = make_shared_handle<TQ>(h);
+    state = make_shared_handle<TQ, Pushed>(h);
     if constexpr (SP == policy::Suspend::Never) {
       started = true;
     }
@@ -201,7 +210,7 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Task, SP> {
     }
   }
   constexpr auto final_suspend() noexcept {
-    return FinalAwaiter<promise_type, TQ>{*this};
+    return FinalAwaiter<promise_type, TQ, Pushed>{*this};
   }
 
   void return_void() noexcept {}
@@ -209,18 +218,20 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Task, SP> {
   void unhandled_exception() noexcept { exception = std::current_exception(); }
 };
 
-template <typename T, queues::Queue TQ,
-          template <queues::Queue, policy::Suspend, typename> class Task,
+template <typename T, typename TQ, typename Pushed,
+          template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
+  requires(queues::Queue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API awaiter {
-  SharedHandle<TQ> handle_;
+  SharedHandle<TQ, Pushed> handle_;
 
   // Derive the promise and handle types from the task type
-  using task_type = Task<TQ, SP, T>;
+  using task_type = Task<TQ, Pushed, SP, T>;
   using promise_type = typename task_type::promise_type;
   using handle_type = std::coroutine_handle<promise_type>;
 
-  explicit awaiter(SharedHandle<TQ> h) noexcept : handle_(std::move(h)) {}
+  explicit awaiter(SharedHandle<TQ, Pushed> h) noexcept
+      : handle_(std::move(h)) {}
 
   [[nodiscard]] bool await_ready() const noexcept {
     return !handle_ || handle_->done_executing();
@@ -265,7 +276,8 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
         handle_->scheduler_queue.compare_exchange_strong(
             expected, queue, std::memory_order_release,
             std::memory_order_relaxed);
-        queue->push([h = handle_]() mutable { h->do_resume(); });
+        queue->push(
+            Pushed{queues::Task{[h = handle_]() mutable { h->do_resume(); }}});
       } else {
         handle_->do_resume();
       }

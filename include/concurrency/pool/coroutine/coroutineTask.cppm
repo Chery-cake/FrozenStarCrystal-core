@@ -13,23 +13,24 @@ import :structs;
 
 export namespace concurrency::pool::coroutine {
 
-template <queues::Queue TQ, policy::Suspend SP, typename T>
+template <typename TQ, typename Pushed, policy::Suspend SP, typename T>
+  requires(queues::Queue<TQ, Pushed>)
 class FROZENSTARCRYSTAL_CORE_API CoroutineTask {
 public:
   // Use the standalone promise_type and awaiter
-  using promise_type = promise_type<T, TQ, CoroutineTask, SP>;
+  using promise_type = promise_type<T, TQ, Pushed, CoroutineTask, SP>;
   using handle_type = std::coroutine_handle<promise_type>;
-  using awaiter_type = awaiter<T, TQ, CoroutineTask, SP>;
+  using awaiter_type = awaiter<T, TQ, Pushed, CoroutineTask, SP>;
 
 private:
-  SharedHandle<TQ> handle_;
+  SharedHandle<TQ, Pushed> handle_;
 
   handle_type typed_handle() const {
     return handle_type::from_address(handle_->handle.address());
   }
 
 public:
-  explicit CoroutineTask(SharedHandle<TQ> handle) noexcept
+  explicit CoroutineTask(SharedHandle<TQ, Pushed> handle) noexcept
       : handle_(std::move(handle)) {}
 
   CoroutineTask(const CoroutineTask &) = delete;

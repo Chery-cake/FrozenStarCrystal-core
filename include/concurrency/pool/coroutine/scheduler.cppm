@@ -17,13 +17,16 @@ export namespace concurrency::pool::coroutine {
 
 inline thread_local bool isPoolWorker = false;
 
-template <queues::Queue TQ, policy::Queue QP>
+template <typename TQ, typename Pushed, policy::Queue QP, typename... Args>
+  requires(queues::Queue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API Scheduler {
 private:
   TQ &queue_;
+  std::tuple<Args...> args_;
 
 public:
-  explicit Scheduler(TQ &queue) : queue_(queue) {};
+  explicit Scheduler(TQ &queue, Args... args)
+      : queue_(queue), args_(std::move(args)...) {};
 
   // Move only
   Scheduler(const Scheduler &) = delete;
@@ -56,7 +59,12 @@ public:
                                                      std::memory_order_relaxed);
     }
 
-    queue_.push([state]() mutable { state->do_resume(); });
+    std::apply(
+        [&s = state, &q = queue_](auto &&...a) {
+          queues::Task t = [s]() mutable { s->do_resume(); };
+          q.push(Pushed{std::move(t), std::forward<decltype(a)>(a)...});
+        },
+        std::move(args_));
   }
 
   void await_resume() noexcept {};

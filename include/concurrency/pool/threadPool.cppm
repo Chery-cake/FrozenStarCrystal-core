@@ -85,10 +85,26 @@ public:
     requires std::is_invocable_v<F, Args...>
   std::future<std::invoke_result_t<F, Args...>> submit(F &&f, Args &&...args);
 
-  template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline>
-  coroutine::Scheduler<TQ, QP> schedule() noexcept;
-  template <coroutine::policy::Queue QP = coroutine::policy::Queue::Enqueue>
-  static coroutine::Scheduler<TQ, QP> schedule(TQ *queue) noexcept;
+  template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline,
+            typename... PushArgs>
+    requires requires(queues::Task t, PushArgs &&...a) {
+      Pushed{std::move(t), std::forward<PushArgs>(a)...};
+    }
+  coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>
+  schedule(PushArgs &&...args) {
+    return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>{
+        *queue_, std::forward<PushArgs>(args)...};
+  }
+  template <coroutine::policy::Queue QP = coroutine::policy::Queue::Enqueue,
+            typename... PushArgs>
+    requires requires(queues::Task t, PushArgs &&...a) {
+      Pushed{std::move(t), std::forward<PushArgs>(a)...};
+    }
+  static coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>
+  schedule(TQ *queue, PushArgs &&...args) {
+    return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>{
+        *queue, std::forward<PushArgs>(args)...};
+  }
 
   void wait() override {
     if (coroutine::isPoolWorker) {
