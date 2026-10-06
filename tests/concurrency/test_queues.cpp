@@ -467,6 +467,180 @@ void test_loop_concurrent_distinct() {
   PASS();
 }
 
+// ─── Aging tests ───────────────────────────────────────────────────────
+
+void test_aging_disabled_matches_pure_priority() {
+  TEST("aging disabled matches pure priority");
+
+  // PriorityQueue uses the default NoAging. Regression guard: adding
+  // aging support must not change the pop order of the default queue.
+  PriorityQueue queue;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+  queue.push(PriorityEntry{[&order] { order.push_back(5); }, 5});
+  queue.push(PriorityEntry{[&order] { order.push_back(3); }, 3});
+  queue.push(PriorityEntry{[&order] { order.push_back(7); }, 7});
+
+  concurrency::queues::Task t;
+  for (int i = 0; i < 4; ++i) {
+    assert(queue.try_pop(t, st));
+    t();
+  }
+  assert(order == std::vector<int>({7, 5, 3, 1}));
+
+  DisabledQueue queue2;
+  std::stop_source ss2;
+  auto st2 = ss2.get_token();
+
+  std::vector<int> order2;
+  queue2.push(PriorityEntry{[&order2] { order2.push_back(1); }, 1});
+  queue2.push(PriorityEntry{[&order2] { order2.push_back(5); }, 5});
+  queue2.push(PriorityEntry{[&order2] { order2.push_back(3); }, 3});
+  queue2.push(PriorityEntry{[&order2] { order2.push_back(7); }, 7});
+
+  concurrency::queues::Task t2;
+  for (int i = 0; i < 4; ++i) {
+    assert(queue2.try_pop(t2, st2));
+    t2();
+  }
+  assert(order2 == std::vector<int>({7, 5, 3, 1}));
+  PASS();
+}
+
+void test_aging_old_low_outranks_new_high() {
+  TEST("aging: old low-priority outranks new high-priority");
+
+  int64_t now = 0;
+  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+  now = 100;
+  queue.push(PriorityEntry{[&order] { order.push_back(10); }, 10});
+
+  concurrency::queues::Task t;
+  assert(queue.try_pop(t, st));
+  t();
+  assert(queue.try_pop(t, st));
+  t();
+  assert(order == std::vector<int>({1, 10}));
+  PASS();
+}
+
+void test_aging_recent_high_outranks_old_low() {
+  TEST("aging: recent high-priority outranks old low-priority");
+
+  int64_t now = 0;
+  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+  now = 2;
+  queue.push(PriorityEntry{[&order] { order.push_back(10); }, 10});
+
+  concurrency::queues::Task t;
+  assert(queue.try_pop(t, st));
+  t();
+  assert(queue.try_pop(t, st));
+  t();
+  assert(order == std::vector<int>({10, 1}));
+  PASS();
+}
+
+void test_aging_equal_deadline_falls_back_to_priority() {
+  TEST("aging: equal deadline falls back to priority");
+
+  int64_t now = 0;
+  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+  now = 9;
+  queue.push(PriorityEntry{[&order] { order.push_back(10); }, 10});
+
+  concurrency::queues::Task t;
+  assert(queue.try_pop(t, st));
+  t();
+  assert(queue.try_pop(t, st));
+  t();
+  assert(order == std::vector<int>({10, 1}));
+  PASS();
+}
+
+void test_aging_full_order() {
+  TEST("aging: pop order equals deadline sort");
+
+  int64_t now = 0;
+  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  struct Rec {
+    int priority;
+    int64_t deadline;
+    int id;
+  };
+  std::vector<Rec> expected;
+  std::vector<int> order;
+
+  for (int i = 0; i < 30; ++i) {
+    const int p = (i * 7 % 10) + 1;
+    expected.push_back({p, now + (11 - p), i});
+    now += 2;
+    queue.push(PriorityEntry{[&order, i] { order.push_back(i); }, p});
+  }
+
+  std::sort(expected.begin(), expected.end(), [](const Rec &a, const Rec &b) {
+    if (a.deadline != b.deadline)
+      return a.deadline < b.deadline;
+    return a.priority > b.priority;
+  });
+
+  concurrency::queues::Task t;
+  for (size_t i = 0; i < expected.size(); ++i) {
+    assert(queue.try_pop(t, st));
+    t();
+    assert(order[i] == expected[i].id);
+  }
+  PASS();
+}
+
+void test_aging_duplicates_and_stop_drain() {
+  TEST("aging: stop drain still hands out aged order");
+
+  int64_t now = 0;
+  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(PriorityEntry{[&order] { order.push_back(10); }, 10});
+  now = 5;
+  queue.push(PriorityEntry{[&order] { order.push_back(5); }, 5});
+  now = 10;
+  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
+
+  ss.request_stop();
+
+  concurrency::queues::Task t;
+  for (int i = 0; i < 3; ++i) {
+    assert(queue.try_pop(t, st));
+    t();
+  }
+  assert(!queue.try_pop(t, st));
+  assert(order == std::vector<int>({10, 5, 1}));
+  PASS();
+}
+
 int main() {
   std::println("=== Concurrency queues Tests ===");
 
@@ -480,6 +654,13 @@ int main() {
       test_priority_stop_drain();
       test_priority_empty();
       test_priority_many();
+
+      test_aging_disabled_matches_pure_priority();
+      test_aging_old_low_outranks_new_high();
+      test_aging_recent_high_outranks_old_low();
+      test_aging_equal_deadline_falls_back_to_priority();
+      test_aging_full_order();
+      test_aging_duplicates_and_stop_drain();
 
       test_loop_round_robin();
       test_loop_single();
@@ -514,14 +695,13 @@ int main() {
 
 static_assert(concurrency::queues::Queue<concurrency::queues::Fifo>);
 
-template <typename E, typename C, typename Cmp>
+template <typename E, template <typename> typename C, typename Cmp>
 concept CanInstantiatePriority =
     requires { typename concurrency::queues::Priority<E, C, Cmp>; };
 
+static_assert(!CanInstantiatePriority<int, std::vector, std::greater<int>>);
 static_assert(
-    !CanInstantiatePriority<int, std::vector<int>, std::greater<int>>);
-static_assert(CanInstantiatePriority<PriorityEntry, std::vector<PriorityEntry>,
-                                     PriorityCompare>);
+    CanInstantiatePriority<PriorityEntry, std::vector, PriorityCompare>);
 static_assert(concurrency::queues::Queue<PriorityQueue, PriorityEntry>);
 
 static_assert(concurrency::queues::Queue<concurrency::queues::Loop>);

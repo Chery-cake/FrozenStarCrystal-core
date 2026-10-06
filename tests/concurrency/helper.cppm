@@ -71,6 +71,34 @@ export {
   };
 
   using PriorityQueue =
-      concurrency::queues::Priority<PriorityEntry, std::vector<PriorityEntry>,
+      concurrency::queues::Priority<PriorityEntry, std::vector,
                                     PriorityCompare>;
+
+  struct TestAging {
+    using Key = int64_t;
+    std::reference_wrapper<int64_t> now;
+
+    Key make_key(const PriorityEntry &e) const {
+      return now.get() + (11 - e.priority);
+    }
+    bool outranks(const Key &a, const Key &b) const { return a < b; }
+  };
+
+  using AgedPriorityQueue =
+      concurrency::queues::Priority<PriorityEntry, std::vector, PriorityCompare,
+                                    TestAging>;
+
+  struct DisabledAging {
+    using Key = int64_t;
+    static constexpr bool active = false;
+
+    Key make_key(const PriorityEntry &) const { return 42; }
+    bool outranks(const Key &, const Key &) const {
+      return true;
+    } // would matter if active
+  };
+
+  using DisabledQueue =
+      concurrency::queues::Priority<PriorityEntry, std::vector, PriorityCompare,
+                                    DisabledAging>;
 }
