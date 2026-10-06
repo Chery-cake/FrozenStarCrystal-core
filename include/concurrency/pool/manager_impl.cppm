@@ -10,8 +10,7 @@ import :manager;
 
 export namespace concurrency::pool {
 
-template <typename TQ, typename Pushed = queues::Task,
-          queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed = queues::Task>
   requires(queues::Queue<TQ, Pushed>)
 inline bool Manager::createPool(const Pool *tag, size_t num_threads) {
   std::unique_lock lock(mutex_);
@@ -19,7 +18,7 @@ inline bool Manager::createPool(const Pool *tag, size_t num_threads) {
   size_t threads =
       num_threads == 0 ? std::thread::hardware_concurrency() : num_threads;
 
-  auto pool = std::make_shared<ThreadPool<TQ, Pushed, Behaviour>>(threads);
+  auto pool = std::make_shared<ThreadPool<TQ, Pushed>>(threads);
 
   bool added = registry_.add(tag, std::move(pool));
   if (added) {
@@ -59,8 +58,7 @@ inline bool Manager::resizePool(const Pool *tag, size_t new_size) {
   return true;
 }
 
-template <typename TQ, typename Pushed = queues::Task,
-          queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed = queues::Task>
   requires(queues::Queue<TQ, Pushed>)
 inline bool Manager::split(const Pool *source, const Pool *new_tag,
                            size_t threads_to_extract) {
@@ -78,7 +76,7 @@ inline bool Manager::split(const Pool *source, const Pool *new_tag,
   }
 
   // Create the new pool – createPool will emit onPoolAdded
-  return createPool<TQ, Pushed, Behaviour>(new_tag, threads_to_extract);
+  return createPool<TQ, Pushed>(new_tag, threads_to_extract);
 }
 
 } // namespace concurrency::pool

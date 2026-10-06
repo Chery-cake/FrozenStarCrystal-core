@@ -51,8 +51,7 @@ public:
   virtual void submit_detach_erased(std::move_only_function<void()> f) = 0;
 };
 
-template <typename TQ, typename Pushed = queues::Task,
-          queues::Behaviour Behaviour = queues::Behaviour::Consuming>
+template <typename TQ, typename Pushed = queues::Task>
   requires(queues::Queue<TQ, Pushed>)
 class FROZENSTARCRYSTAL_CORE_API ThreadPool : public ThreadPoolBase {
 private:
@@ -87,9 +86,9 @@ public:
 
   template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline,
             typename... PushArgs>
-    requires requires(queues::Task t, PushArgs &&...a) {
+    requires(requires(queues::Task t, PushArgs &&...a) {
       Pushed{std::move(t), std::forward<PushArgs>(a)...};
-    }
+    } && queues::Consuming<TQ, Pushed>)
   coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>
   schedule(PushArgs &&...args) {
     return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>{
@@ -97,9 +96,9 @@ public:
   }
   template <coroutine::policy::Queue QP = coroutine::policy::Queue::Enqueue,
             typename... PushArgs>
-    requires requires(queues::Task t, PushArgs &&...a) {
+    requires(requires(queues::Task t, PushArgs &&...a) {
       Pushed{std::move(t), std::forward<PushArgs>(a)...};
-    }
+    } && queues::Consuming<TQ, Pushed>)
   static coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>
   schedule(TQ *queue, PushArgs &&...args) {
     return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>{
@@ -111,7 +110,7 @@ public:
       throw std::logic_error("ThreadPool::wait() called from worker thread");
     }
 
-    if constexpr (Behaviour == queues::Behaviour::Looping) {
+    if constexpr (queues::Looping<TQ, Pushed>) {
       // TODO
       // check if it should wait for the queue to be cleared or just
       // return imidiatle
@@ -136,7 +135,7 @@ public:
   [[nodiscard]] const TQ *queue() const { return queue_.get(); }
 
   [[nodiscard]] queues::Behaviour behaviour() const noexcept override {
-    return Behaviour;
+    return queues::behaviour_of<TQ, Pushed>();
   }
 };
 

@@ -3,14 +3,14 @@ import concurrency_helper;
 
 // ─── Generic tests: work for any (TQ, Pushed, B) ───────────────────────
 
-template <typename TQ, typename Pushed, concurrency::queues::Behaviour B>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_create() {
   TEST("create");
 
-  concurrency::pool::ThreadPool<TQ, Pushed, B> t{};
+  concurrency::pool::ThreadPool<TQ, Pushed> t{};
   assert(t.size() == std::thread::hardware_concurrency());
-  assert(t.behaviour() == B);
+  assert((t.behaviour() == concurrency::queues::behaviour_of<TQ, Pushed>()));
 
   t.resize(2);
   assert(t.size() == 2);
@@ -18,28 +18,28 @@ void test_create() {
   t.resize(10);
   assert(t.size() == 10);
 
-  concurrency::pool::ThreadPool<TQ, Pushed, B> tp(5);
+  concurrency::pool::ThreadPool<TQ, Pushed> tp(5);
   assert(tp.size() == 5);
 
   PASS();
 }
 
-template <typename TQ, typename Pushed, concurrency::queues::Behaviour B>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_empty() {
   TEST("wait empty");
-  concurrency::pool::ThreadPool<TQ, Pushed, B> t(2);
+  concurrency::pool::ThreadPool<TQ, Pushed> t(2);
   t.wait();
   t.wait();
   PASS();
 }
 
-template <typename TQ, typename Pushed, concurrency::queues::Behaviour B>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_for_submit_detach() {
   TEST("wait for submit_detach");
 
-  concurrency::pool::ThreadPool<TQ, Pushed, B> t(4);
+  concurrency::pool::ThreadPool<TQ, Pushed> t(4);
   constexpr int kTasks = 64;
   std::atomic<int> completed{0};
 
@@ -55,12 +55,12 @@ void test_wait_for_submit_detach() {
   PASS();
 }
 
-template <typename TQ, typename Pushed, concurrency::queues::Behaviour B>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_repeated() {
   TEST("wait repeated");
 
-  concurrency::pool::ThreadPool<TQ, Pushed, B> t{4};
+  concurrency::pool::ThreadPool<TQ, Pushed> t{4};
   constexpr int kIters = 2000;
 
   std::ranges::for_each(std::views::iota(0, kIters), [&](int) {
@@ -72,12 +72,12 @@ void test_wait_repeated() {
   PASS();
 }
 
-template <typename TQ, typename Pushed, concurrency::queues::Behaviour B>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_concurrent_submit() {
   TEST("wait concurrent submit");
 
-  concurrency::pool::ThreadPool<TQ, Pushed, B> t{4};
+  concurrency::pool::ThreadPool<TQ, Pushed> t{4};
   constexpr int kProducers = 4;
   constexpr int kPerProducer = 500;
   std::atomic<int> completed{0};
@@ -249,8 +249,7 @@ void test_loop_repeats() {
   TEST("loop repeats");
 
   concurrency::pool::ThreadPool<concurrency::queues::Loop,
-                                concurrency::queues::Task,
-                                concurrency::queues::Behaviour::Looping>
+                                concurrency::queues::Task>
       t(1);
 
   auto count = std::make_shared<std::atomic<int>>(0);
@@ -269,8 +268,7 @@ void test_loop_multiple_entries() {
   TEST("loop multiple entries");
 
   concurrency::pool::ThreadPool<concurrency::queues::Loop,
-                                concurrency::queues::Task,
-                                concurrency::queues::Behaviour::Looping>
+                                concurrency::queues::Task>
       t(1);
 
   auto a = std::make_shared<std::atomic<int>>(0);
@@ -295,33 +293,32 @@ void test_loop_multiple_entries() {
 using Fifo = concurrency::queues::Fifo;
 using Loop = concurrency::queues::Loop;
 using Task = concurrency::queues::Task;
-using B = concurrency::queues::Behaviour;
 
-template <typename TQ, typename Pushed, B Behaviour>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 static void generic_suite() {
-  test_create<TQ, Pushed, Behaviour>();
-  test_wait_empty<TQ, Pushed, Behaviour>();
-  test_wait_for_submit_detach<TQ, Pushed, Behaviour>();
-  test_wait_repeated<TQ, Pushed, Behaviour>();
-  test_wait_concurrent_submit<TQ, Pushed, Behaviour>();
+  test_create<TQ, Pushed>();
+  test_wait_empty<TQ, Pushed>();
+  test_wait_for_submit_detach<TQ, Pushed>();
+  test_wait_repeated<TQ, Pushed>();
+  test_wait_concurrent_submit<TQ, Pushed>();
 }
 
 static void fifo_suite() {
-  generic_suite<Fifo, Task, B::Consuming>();
+  generic_suite<Fifo, Task>();
   test_submit<Fifo>();
   test_wait_with_futures<Fifo>();
   test_wait_from_worker_throws<Fifo>();
 }
 
 static void priority_suite() {
-  generic_suite<PriorityQueue, PriorityEntry, B::Consuming>();
+  generic_suite<PriorityQueue, PriorityEntry>();
   test_priority_submit_order();
   test_priority_duplicates();
 }
 
 static void loop_suite() {
-  test_create<Loop, Task, B::Looping>();
+  test_create<Loop, Task>();
   test_loop_repeats();
   test_loop_multiple_entries();
 }

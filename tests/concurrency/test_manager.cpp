@@ -12,48 +12,48 @@ using B = concurrency::queues::Behaviour;
 
 // ─── Generic per-kind suite ────────────────────────────────────────────
 
-template <typename TQ, typename Pushed, B Behaviour>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_create() {
   TEST("create");
 
   concurrency::pool::Manager m;
 
-  assert((m.createPool<TQ, Pushed, Behaviour>(&p1)));
-  assert((!m.createPool<TQ, Pushed, Behaviour>(&p1)));
+  assert((m.createPool<TQ, Pushed>(&p1)));
+  assert((!m.createPool<TQ, Pushed>(&p1)));
 
-  auto pool1 = m.getPool<TQ, Pushed, Behaviour>(&p1);
+  auto pool1 = m.getPool<TQ, Pushed>(&p1);
   assert(pool1);
   assert(pool1->size() == std::thread::hardware_concurrency());
 
-  assert((m.createPool<TQ, Pushed, Behaviour>(&p2, 5)));
-  assert((m.getPool<TQ, Pushed, Behaviour>(&p2)->size() == 5));
+  assert((m.createPool<TQ, Pushed>(&p2, 5)));
+  assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
   assert(m.removePool(&p2));
   assert(!m.removePool(&p2));
 
-  assert((m.split<TQ, Pushed, Behaviour>(&p1, &p2, 5)));
-  assert((m.getPool<TQ, Pushed, Behaviour>(&p1)->size() ==
+  assert((m.split<TQ, Pushed>(&p1, &p2, 5)));
+  assert((m.getPool<TQ, Pushed>(&p1)->size() ==
           (std::thread::hardware_concurrency() - 5)));
-  assert((m.getPool<TQ, Pushed, Behaviour>(&p2)->size() == 5));
+  assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
   // Cannot split a pool whose size <= extract request.
-  assert((!m.split<TQ, Pushed, Behaviour>(&p2, &p3, 5)));
-  assert((!m.getPool<TQ, Pushed, Behaviour>(&p3)));
+  assert((!m.split<TQ, Pushed>(&p2, &p3, 5)));
+  assert((!m.getPool<TQ, Pushed>(&p3)));
 
   assert((!m.resizePool(&p2, 0)));
-  assert((m.getPool<TQ, Pushed, Behaviour>(&p2)->size() == 5));
+  assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
   assert((m.resizePool(&p2, 3)));
-  assert((m.getPool<TQ, Pushed, Behaviour>(&p2)->size() == 3));
+  assert((m.getPool<TQ, Pushed>(&p2)->size() == 3));
 
   assert((m.resizePool(&p2, 5)));
-  assert((m.getPool<TQ, Pushed, Behaviour>(&p2)->size() == 5));
+  assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
   PASS();
 }
 
-template <typename TQ, typename Pushed, B Behaviour>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_signals() {
   TEST("signals");
@@ -74,12 +74,12 @@ void test_signals() {
 
   assert(count.load() == 0);
 
-  m.createPool<TQ, Pushed, Behaviour>(&p1, 2);
-  m.createPool<TQ, Pushed, Behaviour>(&p2, 4);
+  m.createPool<TQ, Pushed>(&p1, 2);
+  m.createPool<TQ, Pushed>(&p2, 4);
 
   assert(count.load() == 6); // +2 +4
 
-  m.split<TQ, Pushed, Behaviour>(&p2, &p3, 2);
+  m.split<TQ, Pushed>(&p2, &p3, 2);
 
   assert(count.load() == 10); // resize +2, add +2
 
@@ -105,11 +105,11 @@ void test_heterogeneous_coexistence() {
 
   assert(m.createPool<Fifo>(&p1, 2));
   assert((m.createPool<PriorityQueue, PriorityEntry>(&p2, 3)));
-  assert((m.createPool<Loop, Task, B::Looping>(&p3, 4)));
+  assert((m.createPool<Loop, Task>(&p3, 4)));
 
   auto f = m.getPool<Fifo>(&p1);
   auto q = m.getPool<PriorityQueue, PriorityEntry>(&p2);
-  auto l = m.getPool<Loop, Task, B::Looping>(&p3);
+  auto l = m.getPool<Loop, Task>(&p3);
 
   assert(f && f->size() == 2);
   assert(q && q->size() == 3);
@@ -127,7 +127,7 @@ void test_wrong_type_returns_null() {
 
   // Asking for the wrong concrete type yields a null shared_ptr, not UB.
   assert((!m.getPool<PriorityQueue, PriorityEntry>(&p1)));
-  assert((!m.getPool<Loop, Task, B::Looping>(&p1)));
+  assert((!m.getPool<Loop, Task>(&p1)));
   assert(m.getPool<Fifo>(&p1));
 
   PASS();
@@ -175,7 +175,7 @@ void test_heterogeneous_signals() {
 
   m.createPool<Fifo>(&p1, 1);
   m.createPool<PriorityQueue, PriorityEntry>(&p2, 1);
-  m.createPool<Loop, Task, B::Looping>(&p3, 1);
+  m.createPool<Loop, Task>(&p3, 1);
   assert(added.load() == 3);
 
   m.removePool(&p1);
@@ -188,20 +188,18 @@ void test_heterogeneous_signals() {
 
 // ─── Drivers ───────────────────────────────────────────────────────────
 
-template <typename TQ, typename Pushed, B Behaviour>
+template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 static void per_kind_suite() {
   std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {
-    test_create<TQ, Pushed, Behaviour>();
-    test_signals<TQ, Pushed, Behaviour>();
+    test_create<TQ, Pushed>();
+    test_signals<TQ, Pushed>();
   });
 }
 
-static void fifo_suite() { per_kind_suite<Fifo, Task, B::Consuming>(); }
-static void priority_suite() {
-  per_kind_suite<PriorityQueue, PriorityEntry, B::Consuming>();
-}
-static void loop_suite() { per_kind_suite<Loop, Task, B::Looping>(); }
+static void fifo_suite() { per_kind_suite<Fifo, Task>(); }
+static void priority_suite() { per_kind_suite<PriorityQueue, PriorityEntry>(); }
+static void loop_suite() { per_kind_suite<Loop, Task>(); }
 
 static void mixed_suite() {
   std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {

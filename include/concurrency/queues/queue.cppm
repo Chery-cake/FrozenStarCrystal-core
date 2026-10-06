@@ -10,7 +10,7 @@ using Task = std::move_only_function<void()>;
 
 } // namespace concurrency::queues
 
-namespace concurrency::queues {
+export namespace concurrency::queues {
 
 // --- Base: operations *every* queue has, regardless of behavior ---
 template <typename Q, typename Pushed = Task>
@@ -36,10 +36,6 @@ concept Looping =
       { q.remove(i) } -> std::same_as<bool>;
     };
 
-} // namespace concurrency::queues
-
-export namespace concurrency::queues {
-
 // --- The main concept: any of the behaviors ---
 template <typename Q, typename Pushed = Task>
 concept Queue = Consuming<Q, Pushed> || Looping<Q, Pushed>;
@@ -48,5 +44,13 @@ enum class Behaviour : uint8_t {
   Consuming,
   Looping,
 };
+
+template <typename TQ, typename Pushed> constexpr Behaviour behaviour_of() {
+  if constexpr (Consuming<TQ, Pushed>) {
+    return Behaviour::Consuming;
+  } else if constexpr (Looping<TQ, Pushed>) {
+    return Behaviour::Looping;
+  }
+}
 
 } // namespace concurrency::queues

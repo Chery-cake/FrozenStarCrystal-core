@@ -9,9 +9,9 @@ import concurrency.pool.coroutine;
 
 export namespace concurrency::pool {
 
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
-inline ThreadPool<TQ, Pushed, Behaviour>::ThreadPool(size_t num_threads) {
+inline ThreadPool<TQ, Pushed>::ThreadPool(size_t num_threads) {
   queue_ = std::make_unique<TQ>();
 
   size_t threads =
@@ -27,9 +27,9 @@ inline ThreadPool<TQ, Pushed, Behaviour>::ThreadPool(size_t num_threads) {
       });
 }
 
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
-inline ThreadPool<TQ, Pushed, Behaviour>::~ThreadPool() {
+inline ThreadPool<TQ, Pushed>::~ThreadPool() {
   {
     std::unique_lock lock(mtx_);
     std::ranges::for_each(threads_, [](std::jthread &t) { t.request_stop(); });
@@ -41,25 +41,24 @@ inline ThreadPool<TQ, Pushed, Behaviour>::~ThreadPool() {
   threads_.clear();
 }
 
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
-inline void
-ThreadPool<TQ, Pushed, Behaviour>::worker_loop(const std::stop_token &stoken,
-                                               TQ &queue) {
+inline void ThreadPool<TQ, Pushed>::worker_loop(const std::stop_token &stoken,
+                                                TQ &queue) {
   struct WorkerGuard {
     ~WorkerGuard() { coroutine::isPoolWorker = false; }
 
   } guard;
   coroutine::isPoolWorker = true;
 
-  if constexpr (Behaviour == queues::Behaviour::Consuming) {
+  if constexpr (queues::Consuming<TQ, Pushed>) {
     queues::Task task;
     while (queue.try_pop(task, stoken)) {
       if (task) {
         task();
       }
     }
-  } else if constexpr (Behaviour == queues::Behaviour::Looping) {
+  } else if constexpr (queues::Looping<TQ, Pushed>) {
     std::shared_ptr<queues::Task> task;
     while (queue.peek(task, stoken)) {
       (*task)();
@@ -68,14 +67,13 @@ ThreadPool<TQ, Pushed, Behaviour>::worker_loop(const std::stop_token &stoken,
   }
 }
 
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
 template <typename F, typename... PushArgs>
   requires std::is_invocable_v<F> && requires(queues::Task t, PushArgs &&...a) {
     Pushed{std::move(t), std::forward<PushArgs>(a)...};
   }
-void ThreadPool<TQ, Pushed, Behaviour>::submit_detach(F &&f,
-                                                      PushArgs &&...pushArgs) {
+void ThreadPool<TQ, Pushed>::submit_detach(F &&f, PushArgs &&...pushArgs) {
   active_tasks_.fetch_add(1, std::memory_order_relaxed);
 
   try {
@@ -107,12 +105,12 @@ void ThreadPool<TQ, Pushed, Behaviour>::submit_detach(F &&f,
   }
 }
 
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
 template <typename F, typename... Args>
   requires std::is_invocable_v<F, Args...>
 std::future<std::invoke_result_t<F, Args...>>
-ThreadPool<TQ, Pushed, Behaviour>::submit(F &&f, Args &&...args) {
+ThreadPool<TQ, Pushed>::submit(F &&f, Args &&...args) {
   using Ret = std::invoke_result_t<F, Args...>;
 
   auto task = std::make_shared<std::packaged_task<Ret()>>(
@@ -126,9 +124,9 @@ ThreadPool<TQ, Pushed, Behaviour>::submit(F &&f, Args &&...args) {
   return fut;
 }
 
-template <typename TQ, typename Pushed, queues::Behaviour Behaviour>
+template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
-inline void ThreadPool<TQ, Pushed, Behaviour>::resize(size_t new_size) {
+inline void ThreadPool<TQ, Pushed>::resize(size_t new_size) {
   std::unique_lock lock(mtx_);
   size_t current = threads_.size();
 

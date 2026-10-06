@@ -59,35 +59,30 @@ public:
   }
 
   // Creation and destruction
-  template <typename TQ, typename Pushed = queues::Task,
-            queues::Behaviour Behaviour = queues::Behaviour::Consuming>
+  template <typename TQ, typename Pushed = queues::Task>
     requires(queues::Queue<TQ, Pushed>)
   bool createPool(const Pool *tag, size_t num_threads = 0);
   bool removePool(const Pool *tag);
   bool resizePool(const Pool *tag, size_t new_size);
 
   // Split (causes a resize on the source pool and creation of a new one)
-  template <typename TQ, typename Pushed = queues::Task,
-            queues::Behaviour Behaviour = queues::Behaviour::Consuming>
+  template <typename TQ, typename Pushed = queues::Task>
     requires(queues::Queue<TQ, Pushed>)
   bool split(const Pool *source, const Pool *new_tag,
              size_t threads_to_extract);
 
   // Access
-  template <typename TQ, typename Pushed = queues::Task,
-            queues::Behaviour Behaviour = queues::Behaviour::Consuming>
+  template <typename TQ, typename Pushed = queues::Task>
     requires(queues::Queue<TQ, Pushed>)
-  std::shared_ptr<ThreadPool<TQ, Pushed, Behaviour>> getPool(const Pool *tag) {
-    return std::dynamic_pointer_cast<ThreadPool<TQ, Pushed, Behaviour>>(
+  std::shared_ptr<ThreadPool<TQ, Pushed>> getPool(const Pool *tag) {
+    return std::dynamic_pointer_cast<ThreadPool<TQ, Pushed>>(
         registry_.getStored(tag));
   }
 
-  template <typename TQ, typename Pushed = queues::Task,
-            queues::Behaviour Behaviour = queues::Behaviour::Consuming>
+  template <typename TQ, typename Pushed = queues::Task>
     requires(queues::Queue<TQ, Pushed>)
-  ThreadPool<TQ, Pushed, Behaviour> *getPoolRaw(const Pool *tag) {
-    return dynamic_cast<ThreadPool<TQ, Pushed, Behaviour> *>(
-        registry_.get(tag));
+  ThreadPool<TQ, Pushed> *getPoolRaw(const Pool *tag) {
+    return dynamic_cast<ThreadPool<TQ, Pushed> *>(registry_.get(tag));
   }
   std::shared_ptr<ThreadPoolBase> getPoolBase(const Pool *tag) {
     return registry_.getStored(tag);
