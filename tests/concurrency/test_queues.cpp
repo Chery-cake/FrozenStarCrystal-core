@@ -469,52 +469,11 @@ void test_loop_concurrent_distinct() {
 
 // ─── Aging tests ───────────────────────────────────────────────────────
 
-void test_aging_disabled_matches_pure_priority() {
-  TEST("aging disabled matches pure priority");
-
-  // PriorityQueue uses the default NoAging. Regression guard: adding
-  // aging support must not change the pop order of the default queue.
-  PriorityQueue queue;
-  std::stop_source ss;
-  auto st = ss.get_token();
-
-  std::vector<int> order;
-  queue.push(PriorityEntry{[&order] { order.push_back(1); }, 1});
-  queue.push(PriorityEntry{[&order] { order.push_back(5); }, 5});
-  queue.push(PriorityEntry{[&order] { order.push_back(3); }, 3});
-  queue.push(PriorityEntry{[&order] { order.push_back(7); }, 7});
-
-  concurrency::queues::Task t;
-  for (int i = 0; i < 4; ++i) {
-    assert(queue.try_pop(t, st));
-    t();
-  }
-  assert(order == std::vector<int>({7, 5, 3, 1}));
-
-  DisabledQueue queue2;
-  std::stop_source ss2;
-  auto st2 = ss2.get_token();
-
-  std::vector<int> order2;
-  queue2.push(PriorityEntry{[&order2] { order2.push_back(1); }, 1});
-  queue2.push(PriorityEntry{[&order2] { order2.push_back(5); }, 5});
-  queue2.push(PriorityEntry{[&order2] { order2.push_back(3); }, 3});
-  queue2.push(PriorityEntry{[&order2] { order2.push_back(7); }, 7});
-
-  concurrency::queues::Task t2;
-  for (int i = 0; i < 4; ++i) {
-    assert(queue2.try_pop(t2, st2));
-    t2();
-  }
-  assert(order2 == std::vector<int>({7, 5, 3, 1}));
-  PASS();
-}
-
 void test_aging_old_low_outranks_new_high() {
   TEST("aging: old low-priority outranks new high-priority");
 
   int64_t now = 0;
-  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  AgedPriorityQueue queue{TestAging{now}};
   std::stop_source ss;
   auto st = ss.get_token();
 
@@ -536,7 +495,7 @@ void test_aging_recent_high_outranks_old_low() {
   TEST("aging: recent high-priority outranks old low-priority");
 
   int64_t now = 0;
-  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  AgedPriorityQueue queue{TestAging{now}};
   std::stop_source ss;
   auto st = ss.get_token();
 
@@ -558,7 +517,7 @@ void test_aging_equal_deadline_falls_back_to_priority() {
   TEST("aging: equal deadline falls back to priority");
 
   int64_t now = 0;
-  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  AgedPriorityQueue queue{TestAging{now}};
   std::stop_source ss;
   auto st = ss.get_token();
 
@@ -580,7 +539,7 @@ void test_aging_full_order() {
   TEST("aging: pop order equals deadline sort");
 
   int64_t now = 0;
-  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  AgedPriorityQueue queue{TestAging{now}};
   std::stop_source ss;
   auto st = ss.get_token();
 
@@ -618,7 +577,7 @@ void test_aging_duplicates_and_stop_drain() {
   TEST("aging: stop drain still hands out aged order");
 
   int64_t now = 0;
-  AgedPriorityQueue queue{PriorityCompare{}, TestAging{now}};
+  AgedPriorityQueue queue{TestAging{now}};
   std::stop_source ss;
   auto st = ss.get_token();
 
@@ -641,6 +600,160 @@ void test_aging_duplicates_and_stop_drain() {
   PASS();
 }
 
+// ─── Score via member function ─────────────────────────────────────────
+
+struct ComputedEntry {
+  concurrency::queues::Task task;
+  int base = 0;
+  int boost = 0;
+  int priority() const { return base + boost; }
+};
+
+void test_score_member_function() {
+  TEST("score: entry with priority() member function");
+
+  concurrency::queues::Priority<ComputedEntry> queue;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(ComputedEntry{[&order] { order.push_back(1); }, 1, 0});  // 1
+  queue.push(ComputedEntry{[&order] { order.push_back(2); }, 0, 5});  // 5
+  queue.push(ComputedEntry{[&order] { order.push_back(3); }, 1, 5});  // 6
+  queue.push(ComputedEntry{[&order] { order.push_back(4); }, 10, 0}); // 10
+
+  concurrency::queues::Task t;
+  for (int i = 0; i < 4; ++i) {
+    assert(queue.try_pop(t, st));
+    t();
+  }
+  assert(order == std::vector<int>({4, 3, 2, 1}));
+  PASS();
+}
+
+// ─── Score via custom class ────────────────────────────────────────────
+
+struct CustomPriority {
+  int value = 0;
+  auto operator<=>(const CustomPriority &) const = default;
+};
+
+struct CustomEntry {
+  concurrency::queues::Task task;
+  CustomPriority priority;
+};
+
+void test_score_custom_class() {
+  TEST("score: entry with custom priority class");
+
+  concurrency::queues::Priority<CustomEntry> queue;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  queue.push(CustomEntry{[&order] { order.push_back(1); }, {1}});
+  queue.push(CustomEntry{[&order] { order.push_back(5); }, {5}});
+  queue.push(CustomEntry{[&order] { order.push_back(3); }, {3}});
+
+  concurrency::queues::Task t;
+  for (int i = 0; i < 3; ++i) {
+    assert(queue.try_pop(t, st));
+    t();
+  }
+  assert(order == std::vector<int>({5, 3, 1}));
+  PASS();
+}
+
+// ─── Aging over time via reprioritize_all ──────────────────────────────
+
+struct TimedEntry {
+  concurrency::queues::Task task;
+  int priority = 0;
+  int64_t arrival = 0;
+};
+
+// Effective priority grows by 1 for every 10 ticks an entry waits.
+// Older entries therefore overtake new high-priority ones.
+struct TimeAgingScore {
+  using Score = int;
+  std::reference_wrapper<int64_t> now;
+
+  int score(const TimedEntry &e) const {
+    const int64_t waited = now.get() - e.arrival;
+    return e.priority + static_cast<int>(waited / 10);
+  }
+};
+
+void test_aging_over_time() {
+  TEST("aging: reprioritize_all lets old entries overtake new ones");
+
+  int64_t now = 0;
+  using Q = concurrency::queues::Priority<
+      TimedEntry, std::vector, TimeAgingScore,
+      concurrency::queues::AddressableReprioritize>;
+  Q queue{TimeAgingScore{now}};
+
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+
+  // A: low priority, arrives at t=0
+  queue.push(TimedEntry{[&order] { order.push_back(1); }, 1, 0});
+  // B: high priority, arrives at t=100
+  now = 100;
+  queue.push(TimedEntry{[&order] { order.push_back(10); }, 10, 100});
+
+  // At t=100: A's score is 1 + 10 = 11, B's score is 10. B pops first.
+  // Advance the clock and re-age everything.
+  now = 300;
+  queue.reprioritize_all();
+
+  // At t=300: A = 1 + 30 = 31, B = 10 + 20 = 30. A now outranks B.
+  concurrency::queues::Task t;
+  assert(queue.try_pop(t, st));
+  t();
+  assert(queue.try_pop(t, st));
+  t();
+  assert(order == std::vector<int>({1, 10}));
+  PASS();
+}
+
+// ─── Aging a single handle via reprioritize ────────────────────────────
+
+void test_reprioritize_single() {
+  TEST("aging: reprioritize(handle) changes one entry's rank");
+
+  int64_t now = 0;
+  using Q = concurrency::queues::Priority<
+      TimedEntry, std::vector, TimeAgingScore,
+      concurrency::queues::AddressableReprioritize>;
+  Q queue{TimeAgingScore{now}};
+
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+
+  auto ha = queue.push(TimedEntry{[&order] { order.push_back(1); }, 1, 0});
+  now = 100;
+  queue.push(TimedEntry{[&order] { order.push_back(10); }, 10, 100});
+
+  // At t=100: A = 1 + 10 = 11, B = 10. A pops first — but only if we
+  // re-score A. B's score is fixed at push, A's is recomputed here.
+  now = 200;
+  assert(queue.reprioritize(ha));
+
+  // A = 1 + 20 = 21, B is still 10. A pops first.
+  concurrency::queues::Task t;
+  assert(queue.try_pop(t, st));
+  t();
+  assert(queue.try_pop(t, st));
+  t();
+  assert(order == std::vector<int>({1, 10}));
+  PASS();
+}
+
 int main() {
   std::println("=== Concurrency queues Tests ===");
 
@@ -655,12 +768,17 @@ int main() {
       test_priority_empty();
       test_priority_many();
 
-      test_aging_disabled_matches_pure_priority();
       test_aging_old_low_outranks_new_high();
       test_aging_recent_high_outranks_old_low();
       test_aging_equal_deadline_falls_back_to_priority();
       test_aging_full_order();
       test_aging_duplicates_and_stop_drain();
+
+      test_score_member_function();
+      test_score_custom_class();
+
+      test_aging_over_time();
+      test_reprioritize_single();
 
       test_loop_round_robin();
       test_loop_single();
@@ -695,13 +813,12 @@ int main() {
 
 static_assert(concurrency::queues::Queue<concurrency::queues::Fifo>);
 
-template <typename E, template <typename> typename C, typename Cmp>
+template <typename E, template <typename> typename C, typename Score>
 concept CanInstantiatePriority =
-    requires { typename concurrency::queues::Priority<E, C, Cmp>; };
+    requires { typename concurrency::queues::Priority<E, C, Score>; };
 
-static_assert(!CanInstantiatePriority<int, std::vector, std::greater<int>>);
-static_assert(
-    CanInstantiatePriority<PriorityEntry, std::vector, PriorityCompare>);
+static_assert(!CanInstantiatePriority<int, std::vector, BasicScore>);
+static_assert(CanInstantiatePriority<PriorityEntry, std::vector, BasicScore>);
 static_assert(concurrency::queues::Queue<PriorityQueue, PriorityEntry>);
 
 static_assert(concurrency::queues::Queue<concurrency::queues::Loop>);

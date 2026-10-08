@@ -18,7 +18,9 @@ export namespace concurrency::pool::coroutine {
 inline thread_local bool isPoolWorker = false;
 
 template <typename TQ, typename Pushed, policy::Queue QP, typename... Args>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::Queue<TQ, Pushed> &&
+           (queues::DefaultConstructibleEntry<TQ, Pushed, Args...> ||
+            queues::PayloadEntryFrom<TQ, Pushed, Args...>))
 struct FROZENSTARCRYSTAL_CORE_API Scheduler {
 private:
   TQ &queue_;
@@ -59,12 +61,9 @@ public:
                                                      std::memory_order_relaxed);
     }
 
-    std::apply(
-        [&s = state, &q = queue_](auto &&...a) {
-          queues::Task t = [s]() mutable { s->do_resume(); };
-          q.push(Pushed{std::move(t), std::forward<decltype(a)>(a)...});
-        },
-        std::move(args_));
+    queues::Task t = [s = state]() mutable { s->do_resume(); };
+
+    enqueue<TQ, Pushed>(state, queue_, std::move(t), args_);
   }
 
   void await_resume() noexcept {};

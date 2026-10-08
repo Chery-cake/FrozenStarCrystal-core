@@ -10,7 +10,71 @@ import concurrency.pool.coroutine.policy;
 import concurrency.queues;
 import :state;
 
+namespace concurrency::pool::coroutine {
+
+template <typename TQ, typename Pushed, typename State, typename... Args>
+  requires(queues::PayloadEntry<TQ, Pushed> &&
+           queues::BraceConstructible<typename Pushed::Payload,
+                                      std::decay_t<Args>...>)
+void enqueue_payload(State &state, TQ &queue, queues::Task t, Args &&...args) {
+  using Payload = typename Pushed::Payload;
+  Payload payload{std::forward<Args>(args)...};
+  state->inherited_payload = payload;
+  queue.push(queue.make(std::move(t), std::move(payload)));
+}
+
+} // namespace concurrency::pool::coroutine
+
 export namespace concurrency::pool::coroutine {
+
+template <typename TQ, typename Pushed, typename State, typename ArgsTuple>
+void enqueue(State &state, TQ &queue, queues::Task t, ArgsTuple &&args) {
+  std::apply(
+      [&](auto &&...a) {
+        constexpr size_t nargs = sizeof...(a);
+
+        if constexpr (queues::PayloadEntryFrom<TQ, Pushed,
+                                               std::decay_t<decltype(a)>...> &&
+                      nargs > 0) {
+          enqueue_payload<TQ, Pushed>(state, queue, std::move(t),
+                                      std::forward<decltype(a)>(a)...);
+          return;
+        }
+
+        if constexpr (queues::PayloadEntry<TQ, Pushed>) {
+          if (state->inherited_payload) {
+            queue.push(queue.make(std::move(t), *state->inherited_payload));
+          } else if constexpr (queues::PayloadEntryWithDefaultFactory<TQ,
+                                                                      Pushed>) {
+            queue.push(queue.make(std::move(t)));
+          } else {
+            static_assert(
+                queues::PayloadEntryWithDefaultFactory<TQ, Pushed>,
+                "No inherited payload and the queue does not provide a "
+                "default entry factory; call with_payload(...) before "
+                "scheduling.");
+          }
+        } else if constexpr (nargs > 0 &&
+                             queues::DefaultConstructibleEntry<
+                                 TQ, Pushed, std::decay_t<decltype(a)>...>) {
+          queue.push(Pushed{std::move(t), std::forward<decltype(a)>(a)...});
+        } else if constexpr (queues::DefaultConstructibleEntry<TQ, Pushed>) {
+          queue.push(Pushed{std::move(t)});
+        } else {
+          static_assert(
+              queues::DefaultConstructibleEntry<TQ, Pushed,
+                                                std::decay_t<decltype(a)>...>,
+              "No entry constructible from the given "
+              "arguments; provide a "
+              "Pushed constructor that accepts them.");
+        }
+      },
+      std::forward<ArgsTuple>(args));
+}
+template <typename TQ, typename Pushed, typename State>
+void enqueue(State &state, TQ &queue, queues::Task t) {
+  enqueue<TQ, Pushed>(state, queue, std::move(t), std::tuple<>{});
+}
 
 template <typename TQ, typename Pushed>
   requires(queues::Queue<TQ, Pushed>)
@@ -48,13 +112,15 @@ inline void schedule_continuation(const SharedHandle<TQ, Pushed> &state,
   }
 
   if (target_queue != nullptr) {
-    target_queue->push(
-        Pushed{queues::Task{[cont_state, target_queue]() mutable {
-          cont_state->do_resume();
-          if (cont_state->done_executing()) {
-            schedule_continuation<TQ, Pushed>(cont_state, target_queue);
-          }
-        }}});
+
+    queues::Task t = [cont_state, target_queue]() mutable {
+      cont_state->do_resume();
+      if (cont_state->done_executing()) {
+        schedule_continuation<TQ, Pushed>(cont_state, target_queue);
+      }
+    };
+
+    enqueue<TQ, Pushed>(cont_state, *target_queue, std::move(t));
   }
 };
 
@@ -116,12 +182,16 @@ struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
 
     TQ *queue = state->scheduler_queue.load(std::memory_order_acquire);
     if (queue != nullptr) {
-      queue->push(Pushed{queues::Task{[cont_state, queue]() {
+
+      queues::Task t = [cont_state, queue]() {
         cont_state->do_resume();
         if (cont_state->done_executing()) {
           schedule_continuation(cont_state, queue);
         }
-      }}});
+      };
+
+      enqueue<TQ, Pushed>(cont_state, *queue, std::move(t));
+
       return std::noop_coroutine();
     }
 
@@ -268,6 +338,11 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
         auto outer_state = awaiting.promise().state;
         if (outer_state) {
           queue = outer_state->scheduler_queue.load(std::memory_order_acquire);
+          if constexpr (queues::PayloadEntry<TQ, Pushed>) {
+            if (!handle_->inherited_payload) {
+              handle_->inherited_payload = outer_state->inherited_payload;
+            }
+          }
         }
       }
 
@@ -276,8 +351,11 @@ struct FROZENSTARCRYSTAL_CORE_API awaiter {
         handle_->scheduler_queue.compare_exchange_strong(
             expected, queue, std::memory_order_release,
             std::memory_order_relaxed);
-        queue->push(
-            Pushed{queues::Task{[h = handle_]() mutable { h->do_resume(); }}});
+
+        queues::Task t = [h = handle_]() mutable { h->do_resume(); };
+
+        enqueue<TQ, Pushed>(handle_, *queue, std::move(t));
+
       } else {
         handle_->do_resume();
       }

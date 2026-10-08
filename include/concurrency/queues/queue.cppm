@@ -8,10 +8,6 @@ export namespace concurrency::queues {
 
 using Task = std::move_only_function<void()>;
 
-} // namespace concurrency::queues
-
-export namespace concurrency::queues {
-
 // --- Base: operations *every* queue has, regardless of behavior ---
 template <typename Q, typename Pushed = Task>
 concept Base = requires(Q &q, Pushed &p) {
@@ -52,5 +48,51 @@ template <typename TQ, typename Pushed> constexpr Behaviour behaviour_of() {
     return Behaviour::Looping;
   }
 }
+
+// A queue that exposes make(Task) and, when the entry has a Payload,
+// make(Task, Payload).
+
+template <typename T, typename... Args>
+concept BraceConstructible =
+    requires(Args &&...args) { T{std::forward<Args>(args)...}; };
+template <typename Pushed>
+concept HasPayload = requires { typename Pushed::Payload; };
+
+template <typename TQ, typename Pushed>
+concept PayloadEntry = HasPayload<Pushed> && requires(TQ q, const Pushed cp,
+                                                      Task t) {
+  Queue<TQ, Pushed>;
+  { cp.payload() } -> std::same_as<typename Pushed::Payload>;
+  {
+    q.make(std::move(t), std::move(std::declval<typename Pushed::Payload>()))
+  } -> std::same_as<Pushed>;
+};
+
+template <typename TQ, typename Pushed>
+concept PayloadEntryWithDefaultFactory =
+    PayloadEntry<TQ, Pushed> && requires(TQ q, Task t) {
+      { q.make(std::move(t)) } -> std::same_as<Pushed>;
+    };
+
+template <typename TQ, typename Pushed, typename... Args>
+concept DefaultConstructibleEntry =
+    requires { BraceConstructible<Pushed, Task, Args...>; };
+
+template <typename TQ, typename Pushed> struct PayloadOfImpl {
+  using type = std::monostate;
+};
+
+template <typename TQ, typename Pushed>
+  requires(PayloadEntry<TQ, Pushed>)
+struct PayloadOfImpl<TQ, Pushed> {
+  using type = typename Pushed::Payload;
+};
+
+template <typename TQ, typename Pushed>
+using PayloadOf = typename PayloadOfImpl<TQ, Pushed>::type;
+
+template <typename TQ, typename Pushed, typename... Args>
+concept PayloadEntryFrom = PayloadEntry<TQ, Pushed> &&
+                           BraceConstructible<PayloadOf<TQ, Pushed>, Args...>;
 
 } // namespace concurrency::queues

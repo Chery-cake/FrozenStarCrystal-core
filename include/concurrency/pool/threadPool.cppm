@@ -76,7 +76,7 @@ public:
              }
   void submit_detach(F &&f, PushArgs &&...pushArgs);
   void submit_detach_erased(std::move_only_function<void()> f) override {
-    static_assert(std::is_constructible_v<Pushed, queues::Task>);
+    static_assert(queues::BraceConstructible<Pushed, queues::Task>);
     submit_detach(std::move(f));
   }
 

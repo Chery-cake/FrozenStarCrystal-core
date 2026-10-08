@@ -58,47 +58,35 @@ export {
     void await_resume() {}
   };
 
+  // ─── Priority queue test types ───────────────────────────────────────
+
   struct PriorityEntry {
     concurrency::queues::Task task;
     int priority = 0;
   };
 
-  struct PriorityCompare {
-    bool operator()(const PriorityEntry &a,
-                    const PriorityEntry &b) const noexcept {
-      return a.priority < b.priority;
-    }
+  // Default-style score: read the entry's own priority field.
+  struct BasicScore {
+    using Score = int;
+    int score(const PriorityEntry &e) const noexcept { return e.priority; }
   };
 
   using PriorityQueue =
-      concurrency::queues::Priority<PriorityEntry, std::vector,
-                                    PriorityCompare>;
+      concurrency::queues::Priority<PriorityEntry, std::vector, BasicScore>;
 
+  // Deadline aging. Highest tuple value pops first (max-heap), so:
+  //   - primary:  -deadline  (earlier deadline → larger key)
+  //   - tiebreak: priority   (higher priority → larger key)
   struct TestAging {
-    using Key = int64_t;
+    using Score = std::tuple<int64_t, int>;
     std::reference_wrapper<int64_t> now;
 
-    Key make_key(const PriorityEntry &e) const {
-      return now.get() + (11 - e.priority);
+    auto score(const PriorityEntry &e) const {
+      const int64_t deadline = now.get() + (11 - e.priority);
+      return std::tuple{-deadline, e.priority};
     }
-    bool outranks(const Key &a, const Key &b) const { return a < b; }
   };
 
   using AgedPriorityQueue =
-      concurrency::queues::Priority<PriorityEntry, std::vector, PriorityCompare,
-                                    TestAging>;
-
-  struct DisabledAging {
-    using Key = int64_t;
-    static constexpr bool active = false;
-
-    Key make_key(const PriorityEntry &) const { return 42; }
-    bool outranks(const Key &, const Key &) const {
-      return true;
-    } // would matter if active
-  };
-
-  using DisabledQueue =
-      concurrency::queues::Priority<PriorityEntry, std::vector, PriorityCompare,
-                                    DisabledAging>;
+      concurrency::queues::Priority<PriorityEntry, std::vector, TestAging>;
 }

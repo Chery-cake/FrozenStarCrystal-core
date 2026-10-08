@@ -82,6 +82,13 @@ public:
   auto operator co_await() && noexcept {
     return awaiter_type{std::move(handle_)};
   }
+
+  template <typename Q = TQ, typename P = Pushed>
+    requires(queues::PayloadEntry<Q, P>)
+  CoroutineTask &with_payload(typename P::Payload p) & {
+    handle_->inherited_payload = std::move(p);
+    return *this;
+  }
 };
 
 } // namespace concurrency::pool::coroutine

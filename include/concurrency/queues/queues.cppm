@@ -12,3 +12,6 @@ export import :loop;
 // will need to implement the queue, std doen't have one lock-free
 //
 // look into: Michael–Scott queue
+//
+// Move the factory to the queue, so all queues have their own factory for
+// their entries, solving the problems with the coroutines

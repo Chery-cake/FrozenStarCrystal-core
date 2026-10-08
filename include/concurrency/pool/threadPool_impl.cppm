@@ -93,8 +93,18 @@ void ThreadPool<TQ, Pushed>::submit_detach(F &&f, PushArgs &&...pushArgs) {
       }
     };
 
-    queue_->push(
-        Pushed{std::move(wrapped), std::forward<PushArgs>(pushArgs)...});
+    if constexpr (queues::PayloadEntry<TQ, Pushed> && sizeof...(PushArgs) > 0) {
+      auto payload =
+          typename Pushed::Payload{std::forward<PushArgs>(pushArgs)...};
+      queue_->push(queue_->make(std::move(wrapped), std::move(payload)));
+    } else if constexpr (queues::PayloadEntry<TQ, Pushed>) {
+      queue_->push(queue_->make(std::move(wrapped)));
+    } else if constexpr (sizeof...(PushArgs) > 0) {
+      queue_->push(
+          Pushed{std::move(wrapped), std::forward<PushArgs>(pushArgs)...});
+    } else {
+      queue_->push(Pushed{std::move(wrapped)});
+    }
   } catch (const std::exception &e) { // TODO make it rethorw the exception
                                       // after decreasing the cunter
     active_tasks_.fetch_sub(1, std::memory_order_relaxed);

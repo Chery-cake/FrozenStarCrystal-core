@@ -37,6 +37,8 @@ struct FROZENSTARCRYSTAL_CORE_API CoroutineState
 
   std::atomic<bool> executed{false};
 
+  std::optional<queues::PayloadOf<TQ, Pushed>> inherited_payload;
+
   explicit CoroutineState(std::coroutine_handle<> h) : handle(h) {}
   ~CoroutineState() {
     if (handle) {
