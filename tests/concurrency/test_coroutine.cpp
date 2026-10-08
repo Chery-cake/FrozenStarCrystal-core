@@ -414,12 +414,12 @@ int main() {
   std::array<std::jthread, 5> threads;
 
   std::ranges::for_each(threads, [](std::jthread &th) {
-    th = std::jthread(ex<concurrency::queues::Fifo>, 100);
+    th = std::jthread(ex<concurrency::queues::Fifo<>>, 100);
   });
 
   std::ranges::for_each(threads, [](std::jthread &th) { th.join(); });
 
-  ex<concurrency::queues::Fifo>(100);
+  ex<concurrency::queues::Fifo<>>(100);
 
   std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
   return (tests_passed == tests_run) ? 0 : 1;

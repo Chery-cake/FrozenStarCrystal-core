@@ -5,7 +5,7 @@ constexpr concurrency::pool::Pool p1("p1");
 constexpr concurrency::pool::Pool p2("p2");
 constexpr concurrency::pool::Pool p3("p3");
 
-using Fifo = concurrency::queues::Fifo;
+using Fifo = concurrency::queues::Fifo<>;
 using Loop = concurrency::queues::Loop;
 using Task = concurrency::queues::Task;
 using B = concurrency::queues::Behaviour;

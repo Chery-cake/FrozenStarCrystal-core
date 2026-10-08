@@ -11,8 +11,8 @@ using Task = std::move_only_function<void()>;
 // --- Base: operations *every* queue has, regardless of behavior ---
 template <typename Q, typename Pushed = Task>
 concept Base = requires(Q &q, Pushed &p) {
-  { q.push(std::move(p)) } -> std::same_as<void>;
-  { q.notify_all() } -> std::same_as<void>;
+  q.push(std::move(p));
+  q.notify_all();
   { q.empty() } -> std::same_as<bool>;
 };
 
@@ -96,3 +96,10 @@ concept PayloadEntryFrom = PayloadEntry<TQ, Pushed> &&
                            BraceConstructible<PayloadOf<TQ, Pushed>, Args...>;
 
 } // namespace concurrency::queues
+
+// TODO
+// make so that the payload can have extra values for the queue or task, like
+// priority value for the queue or extra parameters for a overload of the
+// function
+// make so the payload can carry a function call, that can be called alongside
+// the original task or replace it

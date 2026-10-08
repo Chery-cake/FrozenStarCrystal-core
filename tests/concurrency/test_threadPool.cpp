@@ -290,7 +290,7 @@ void test_loop_multiple_entries() {
 
 // ─── Drivers ───────────────────────────────────────────────────────────
 
-using Fifo = concurrency::queues::Fifo;
+using Fifo = concurrency::queues::Fifo<>;
 using Loop = concurrency::queues::Loop;
 using Task = concurrency::queues::Task;
 

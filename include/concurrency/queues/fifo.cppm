@@ -9,9 +9,15 @@ import :queue;
 
 export namespace concurrency::queues {
 
-struct FROZENSTARCRYSTAL_CORE_API Fifo {
+template <typename E>
+concept FifoEntry = requires(E e, const E ce) {
+  { e.task } -> std::same_as<Task &>;
+  { ce.task } -> std::same_as<const Task &>;
+} || std::same_as<E, Task>;
+
+template <FifoEntry Entry = Task> struct FROZENSTARCRYSTAL_CORE_API Fifo {
 private:
-  std::queue<Task> queue;
+  std::queue<Entry> queue;
   mutable std::mutex mutex;
   std::counting_semaphore<> permits{0};
 
@@ -19,10 +25,10 @@ private:
   std::atomic<uint64_t> wake{0};
 
 public:
-  void push(Task t) {
+  void push(Entry e) {
     {
       std::scoped_lock lock(mutex);
-      queue.push(std::move(t));
+      queue.push(std::move(e));
     }
     size.fetch_add(1, std::memory_order_release);
     wake.fetch_add(1, std::memory_order_release);
@@ -38,7 +44,11 @@ public:
       if (size.load(std::memory_order_relaxed) != 0 && permits.try_acquire()) {
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
-          t = std::move(queue.front());
+          if constexpr (std::is_same_v<Entry, Task>) {
+            t = std::move(queue.front());
+          } else {
+            t = std::move(queue.front().task);
+          }
           queue.pop();
           lock.unlock();
           size.fetch_sub(1, std::memory_order_release);
@@ -53,7 +63,11 @@ public:
       if (stoken.stop_requested()) {
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
-          t = std::move(queue.front());
+          if constexpr (std::is_same_v<Entry, Task>) {
+            t = std::move(queue.front());
+          } else {
+            t = std::move(queue.front().task);
+          }
           queue.pop();
           lock.unlock();
           size.fetch_sub(1, std::memory_order_release);
@@ -85,6 +99,24 @@ public:
   void notify_all() { wake.notify_all(); }
 
   bool empty() { return size.load(std::memory_order_acquire) == 0; }
+
+  Entry make(Task t)
+    requires(std::same_as<Entry, Task> || BraceConstructible<Entry, Task>)
+  {
+    if constexpr (std::same_as<Entry, Task>) {
+      return std::move(t);
+    } else {
+      return Entry{std::move(t)};
+    }
+  }
+
+  template <typename Payload>
+  Entry make(Task t, Payload p)
+    requires(!std::same_as<Entry, Task> &&
+             BraceConstructible<Entry, Task, Payload>)
+  {
+    return Entry{std::move(t), std::move(p)};
+  }
 };
 
 } // namespace concurrency::queues
