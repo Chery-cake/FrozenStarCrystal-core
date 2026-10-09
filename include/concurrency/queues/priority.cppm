@@ -228,7 +228,7 @@ private:
       sift_down(0);
     }
 
-    out = std::move(unwrap(top).entry.task);
+    out = to_task(std::move(unwrap(top).entry));
   }
 
   void signal_push() {

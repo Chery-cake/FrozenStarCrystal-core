@@ -8,6 +8,27 @@ export namespace concurrency::queues {
 
 using Task = std::move_only_function<void()>;
 
+template <typename E>
+concept RetireableLoopEntry = requires(E &e) {
+  { e.invoke() } -> std::same_as<void>;
+  { e.should_retire() } -> std::convertible_to<bool>;
+};
+
+template <typename E> inline void invoke_entry(E &e) {
+  if constexpr (std::same_as<E, Task>) {
+    e();
+  } else {
+    e.invoke();
+  }
+}
+template <typename E> inline bool entry_should_retire(const E &e) {
+  if constexpr (std::same_as<E, Task>) {
+    return false;
+  } else {
+    return e.should_retire();
+  }
+}
+
 // --- Base: operations *every* queue has, regardless of behavior ---
 template <typename Q, typename Pushed = Task>
 concept Base = requires(Q &q, Pushed &p) {
@@ -25,7 +46,7 @@ concept Consuming =
 
 template <typename Q, typename Pushed>
 concept Looping =
-    Base<Q, Pushed> && requires(Q &q, std::shared_ptr<Task> &t,
+    Base<Q, Pushed> && requires(Q &q, std::shared_ptr<Pushed> &t,
                                 const std::stop_token &st, size_t i) {
       { q.peek(t, st) } -> std::same_as<bool>;
       { q.clear() } -> std::same_as<void>;
@@ -49,18 +70,30 @@ template <typename TQ, typename Pushed> constexpr Behaviour behaviour_of() {
   }
 }
 
+template <typename TQ, typename Pushed>
+concept SchedulableQueue = Consuming<TQ, Pushed> || RetireableLoopEntry<Pushed>;
+
 // A queue that exposes make(Task) and, when the entry has a Payload,
 // make(Task, Payload).
 
 template <typename T, typename... Args>
 concept BraceConstructible =
     requires(Args &&...args) { T{std::forward<Args>(args)...}; };
+
 template <typename Pushed>
-concept HasPayload = requires { typename Pushed::Payload; };
+concept Payload = requires(const Pushed cp) {
+  typename Pushed::Payload;
+  { cp.payload() } -> std::same_as<typename Pushed::Payload>;
+};
+
+template<typename  P>
+concept CallablePayload =Payload<P>&&(
+    requires(P p) { std::invoke(std::move(p)); } ||
+    requires(P p, Task t) { std::invoke(std::move(p), std::move(t)); });
 
 template <typename TQ, typename Pushed>
-concept PayloadEntry = HasPayload<Pushed> && requires(TQ q, const Pushed cp,
-                                                      Task t) {
+concept PayloadEntry = Payload<Pushed> && requires(TQ q, const Pushed cp,
+                                                   Task t) {
   Queue<TQ, Pushed>;
   { cp.payload() } -> std::same_as<typename Pushed::Payload>;
   {
@@ -95,6 +128,47 @@ template <typename TQ, typename Pushed, typename... Args>
 concept PayloadEntryFrom = PayloadEntry<TQ, Pushed> &&
                            BraceConstructible<PayloadOf<TQ, Pushed>, Args...>;
 
+template <typename Entry>
+concept GeneralEntry =
+    std::same_as<std::remove_cvref_t<Entry>, Task> ||
+    requires(std::remove_cvref_t<Entry> en) {
+      { std::move(en).task } -> std::convertible_to<Task>;
+    } ||
+    (Payload<std::remove_cvref_t<Entry>> &&
+     requires(typename std::remove_cvref_t<Entry>::Payload p) {
+       { std::invoke(std::move(p)) } -> std::same_as<void>;
+     });
+
+template <typename Entry>
+  requires(GeneralEntry<Entry>)
+Task to_task(Entry &&e) {
+  using E = std::remove_cvref_t<Entry>;
+
+  if constexpr (std::same_as<E, Task>) {
+    return std::forward<Entry>(e);
+  } else if constexpr (
+      Payload<E> &&
+      requires(E en) {
+        { std::move(en).task } -> std::convertible_to<Task>;
+      } &&
+      requires(typename E::Payload p, Task t) {
+        { std::invoke(std::move(p), std::move(t)) } -> std::same_as<void>;
+      }) {
+    return Task{[p = std::forward<Entry>(e).payload(),
+                 t = std::forward<Entry>(e).task]() mutable {
+      std::invoke(std::move(p), std::move(t));
+    }};
+  } else if constexpr (Payload<E> && requires(typename E::Payload p) {
+                         { std::invoke(std::move(p)) } -> std::same_as<void>;
+                       }) {
+    return Task{[p = std::forward<Entry>(e).payload()]() mutable {
+      std::invoke(std::move(p));
+    }};
+  } else {
+    return std::forward<Entry>(e).task;
+  }
+}
+
 } // namespace concurrency::queues
 
 // TODO
@@ -103,3 +177,5 @@ concept PayloadEntryFrom = PayloadEntry<TQ, Pushed> &&
 // function
 // make so the payload can carry a function call, that can be called alongside
 // the original task or replace it
+//
+// the payload must be able to run on any queue, fifo priority loop etc

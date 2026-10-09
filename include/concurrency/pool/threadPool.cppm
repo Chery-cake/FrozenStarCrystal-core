@@ -85,24 +85,24 @@ public:
   std::future<std::invoke_result_t<F, Args...>> submit(F &&f, Args &&...args);
 
   template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline,
-            typename... PushArgs>
-    requires(requires(queues::Task t, PushArgs &&...a) {
-      Pushed{std::move(t), std::forward<PushArgs>(a)...};
-    } && queues::Consuming<TQ, Pushed>)
-  coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>
-  schedule(PushArgs &&...args) {
-    return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>{
-        *queue_, std::forward<PushArgs>(args)...};
+            typename... Args>
+    requires(queues::SchedulableQueue<TQ, Pushed> &&
+             (queues::DefaultConstructibleEntry<TQ, Pushed, Args...> ||
+              queues::PayloadEntryFrom<TQ, Pushed, Args...>))
+  coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<Args>...>
+  schedule(Args &&...args) {
+    return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<Args>...>{
+        *queue_, std::forward<Args>(args)...};
   }
-  template <coroutine::policy::Queue QP = coroutine::policy::Queue::Enqueue,
-            typename... PushArgs>
-    requires(requires(queues::Task t, PushArgs &&...a) {
-      Pushed{std::move(t), std::forward<PushArgs>(a)...};
-    } && queues::Consuming<TQ, Pushed>)
-  static coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>
-  schedule(TQ *queue, PushArgs &&...args) {
-    return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<PushArgs>...>{
-        *queue, std::forward<PushArgs>(args)...};
+  template <coroutine::policy::Queue QP = coroutine::policy::Queue::Inline,
+            typename... Args>
+    requires(queues::SchedulableQueue<TQ, Pushed> &&
+             (queues::DefaultConstructibleEntry<TQ, Pushed, Args...> ||
+              queues::PayloadEntryFrom<TQ, Pushed, Args...>))
+  static coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<Args>...>
+  schedule(TQ *queue, Args &&...args) {
+    return coroutine::Scheduler<TQ, Pushed, QP, std::decay_t<Args>...>{
+        *queue, std::forward<Args>(args)...};
   }
 
   void wait() override {

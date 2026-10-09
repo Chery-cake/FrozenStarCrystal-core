@@ -59,10 +59,10 @@ inline void ThreadPool<TQ, Pushed>::worker_loop(const std::stop_token &stoken,
       }
     }
   } else if constexpr (queues::Looping<TQ, Pushed>) {
-    std::shared_ptr<queues::Task> task;
-    while (queue.peek(task, stoken)) {
-      (*task)();
-      task.reset();
+    std::shared_ptr<typename TQ::entry_type> entry;
+    while (queue.peek(entry, stoken)) {
+      queues::invoke_entry(*entry);
+      entry.reset();
     }
   }
 }

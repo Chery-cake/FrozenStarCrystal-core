@@ -9,9 +9,14 @@ import :queue;
 
 export namespace concurrency::queues {
 
+template <typename Entry>
+  requires(std::same_as<Entry, Task> || RetireableLoopEntry<Entry>)
 struct FROZENSTARCRYSTAL_CORE_API Loop {
+public:
+  using entry_type = Entry;
+
 private:
-  std::vector<std::shared_ptr<Task>> queue;
+  std::vector<std::shared_ptr<Entry>> queue;
   mutable std::mutex mutex;
 
   size_t index = 0;
@@ -19,16 +24,16 @@ private:
   std::atomic<uint64_t> wake{0};
 
 public:
-  void push(Task task) {
+  void push(Entry entry) {
     std::unique_lock lock(mutex);
-    queue.push_back(std::make_shared<Task>(std::move(task)));
+    queue.push_back(std::make_shared<Entry>(std::move(entry)));
     lock.unlock();
     size.fetch_add(1, std::memory_order_release);
     wake.fetch_add(1, std::memory_order_release);
     wake.notify_all();
   }
 
-  bool peek(std::shared_ptr<Task> &task, const std::stop_token &stoken) {
+  bool peek(std::shared_ptr<Entry> &entry, const std::stop_token &stoken) {
     std::optional<std::stop_callback<std::function<void()>>> cb;
     while (true) {
       // --- If stopped, exit. ---
@@ -41,9 +46,28 @@ public:
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
           size_t i = index;
-          index = (i + 1 == queue.size()) ? 0 : i + 1;
+          entry = queue[i];
 
-          task = queue[i]; // copy the weak_ptr — entry stays put
+          if (entry_should_retire(*entry)) {
+            // Claim-and-remove: another worker cannot peek this
+            // slot.
+            if (i != queue.size() - 1) {
+              queue[i] = std::move(queue.back());
+              if constexpr (requires { queue[i]->index; }) {
+                queue[i]->index = i;
+              }
+            }
+            queue.pop_back();
+            size.fetch_sub(1, std::memory_order_release);
+
+            // index stays at i: the swapped-in entry will be next.
+            if (queue.empty() || index >= queue.size()) {
+              index = 0;
+            }
+          } else {
+            index = (i + 1 == queue.size()) ? 0 : i + 1;
+          }
+
           lock.unlock();
           return true;
         }
@@ -86,18 +110,65 @@ public:
     }
     queue.pop_back();
 
-    if (queue.empty()) {
-      index = 0;
-    } else if (index >= queue.size()) {
+    if (queue.empty() || index >= queue.size()) {
       index = 0;
     }
 
     size.fetch_sub(1, std::memory_order_acquire);
     return true;
   }
+  bool remove(const std::shared_ptr<Entry> &entry) {
+    std::unique_lock lock(mutex);
+    auto it = std::find(queue.begin(), queue.end(), entry);
+    if (it == queue.end()) {
+      return false;
+    }
+
+    auto i = static_cast<size_t>(std::distance(queue.begin(), it));
+
+    // If Entry tracks its own slot, keep it accurate for the moved one.
+    if (i != queue.size() - 1) {
+      queue[i] = std::move(queue.back());
+      if constexpr (requires { queue[i]->index; }) {
+        queue[i]->index = i;
+      }
+    }
+    queue.pop_back();
+
+    if (queue.empty() || index >= queue.size()) {
+      index = 0;
+    }
+    // Note: peek has already advanced `index` past i, so no further fix-up
+    // is needed here for the common case.
+
+    size.fetch_sub(1, std::memory_order_release);
+    return true;
+  }
 
   void notify_all() { wake.notify_all(); }
   bool empty() { return size.load(std::memory_order_acquire) == 0; }
+
+  [[nodiscard]] size_t entry_count() const noexcept {
+    return size.load(std::memory_order_acquire);
+  }
+
+  Entry make(Task t)
+    requires(std::same_as<Entry, Task> || BraceConstructible<Entry, Task>)
+  {
+    if constexpr (std::same_as<Entry, Task>) {
+      return std::move(t);
+    } else {
+      return Entry{std::move(t)};
+    }
+  }
+
+  template <typename Payload>
+  Entry make(Task t, Payload p)
+    requires(!std::same_as<Entry, Task> &&
+             BraceConstructible<Entry, Task, Payload>)
+  {
+    return Entry{std::move(t), std::move(p)};
+  }
 };
 
 } // namespace concurrency::queues

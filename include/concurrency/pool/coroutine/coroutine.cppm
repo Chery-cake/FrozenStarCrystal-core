@@ -11,8 +11,6 @@ export import :structs;
 export import :task;
 
 // TODO
-// make so the priority on the coroutine can be affected by the aging of the
-// queue and that it could be applyed when the coroutine is created
-//
-// make so the coroutine can receive parameters, that aren't only the priority,
-// and the parameters are decided by the entry used
+// test policy::Suspend::Always, make sure it's implemented correctly
+// better test and verify all policies, if they are implemented correctly and
+// working porperly

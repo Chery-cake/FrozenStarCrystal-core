@@ -248,8 +248,9 @@ void test_priority_duplicates() {
 void test_loop_repeats() {
   TEST("loop repeats");
 
-  concurrency::pool::ThreadPool<concurrency::queues::Loop,
-                                concurrency::queues::Task>
+  concurrency::pool::ThreadPool<
+      concurrency::queues::Loop<concurrency::queues::Task>,
+      concurrency::queues::Task>
       t(1);
 
   auto count = std::make_shared<std::atomic<int>>(0);
@@ -267,8 +268,9 @@ void test_loop_repeats() {
 void test_loop_multiple_entries() {
   TEST("loop multiple entries");
 
-  concurrency::pool::ThreadPool<concurrency::queues::Loop,
-                                concurrency::queues::Task>
+  concurrency::pool::ThreadPool<
+      concurrency::queues::Loop<concurrency::queues::Task>,
+      concurrency::queues::Task>
       t(1);
 
   auto a = std::make_shared<std::atomic<int>>(0);
@@ -291,7 +293,7 @@ void test_loop_multiple_entries() {
 // ─── Drivers ───────────────────────────────────────────────────────────
 
 using Fifo = concurrency::queues::Fifo<>;
-using Loop = concurrency::queues::Loop;
+using Loop = concurrency::queues::Loop<concurrency::queues::Task>;
 using Task = concurrency::queues::Task;
 
 template <typename TQ, typename Pushed>

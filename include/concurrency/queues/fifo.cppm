@@ -9,13 +9,7 @@ import :queue;
 
 export namespace concurrency::queues {
 
-template <typename E>
-concept FifoEntry = requires(E e, const E ce) {
-  { e.task } -> std::same_as<Task &>;
-  { ce.task } -> std::same_as<const Task &>;
-} || std::same_as<E, Task>;
-
-template <FifoEntry Entry = Task> struct FROZENSTARCRYSTAL_CORE_API Fifo {
+template <GeneralEntry Entry = Task> struct FROZENSTARCRYSTAL_CORE_API Fifo {
 private:
   std::queue<Entry> queue;
   mutable std::mutex mutex;
@@ -44,11 +38,7 @@ public:
       if (size.load(std::memory_order_relaxed) != 0 && permits.try_acquire()) {
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
-          if constexpr (std::is_same_v<Entry, Task>) {
-            t = std::move(queue.front());
-          } else {
-            t = std::move(queue.front().task);
-          }
+          t = to_task(std::move(queue.front()));
           queue.pop();
           lock.unlock();
           size.fetch_sub(1, std::memory_order_release);
@@ -63,11 +53,7 @@ public:
       if (stoken.stop_requested()) {
         std::unique_lock lock(mutex);
         if (!queue.empty()) {
-          if constexpr (std::is_same_v<Entry, Task>) {
-            t = std::move(queue.front());
-          } else {
-            t = std::move(queue.front().task);
-          }
+          t = to_task(std::move(queue.front()));
           queue.pop();
           lock.unlock();
           size.fetch_sub(1, std::memory_order_release);
