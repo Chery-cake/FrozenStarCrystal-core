@@ -14,7 +14,7 @@ import :structs;
 export namespace concurrency::pool::coroutine {
 
 template <typename TQ, typename Pushed, policy::Suspend SP, typename T>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 class FROZENSTARCRYSTAL_CORE_API CoroutineTask {
 public:
   // Use the standalone promise_type and awaiter

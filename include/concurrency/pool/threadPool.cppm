@@ -45,10 +45,10 @@ public:
   // Fire-and-forget, no push args. Use getPool<TQ, Pushed, B>() to
   // reach the templated submit_detach when you need to forward
   // {priority, ...} style arguments.
-  template <typename F, typename... Args> // TODO force implementation
-    requires std::is_invocable_v<F, Args...>
-  std::future<std::invoke_result_t<F, Args...>> submit(F &&f, Args &&...args);
-  virtual void submit_detach_erased(std::move_only_function<void()> f) = 0;
+  /*template <typename F, typename... Args> // TODO force implementation
+      requires std::is_invocable_v<F, Args...>
+    std::future<std::invoke_result_t<F, Args...>> submit(F &&f, Args
+    &&...args);*/
 };
 
 template <typename TQ, typename Pushed = queues::Task>
@@ -75,10 +75,6 @@ public:
                Pushed{std::move(t), std::forward<PushArgs>(a)...};
              }
   void submit_detach(F &&f, PushArgs &&...pushArgs);
-  void submit_detach_erased(std::move_only_function<void()> f) override {
-    static_assert(queues::BraceConstructible<Pushed, queues::Task>);
-    submit_detach(std::move(f));
-  }
 
   template <typename F, typename... Args>
     requires std::is_invocable_v<F, Args...>

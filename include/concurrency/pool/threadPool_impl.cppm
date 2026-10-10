@@ -62,6 +62,7 @@ inline void ThreadPool<TQ, Pushed>::worker_loop(const std::stop_token &stoken,
     std::shared_ptr<typename TQ::entry_type> entry;
     while (queue.peek(entry, stoken)) {
       queues::invoke_entry(*entry);
+      queue.release(*entry);
       entry.reset();
     }
   }
@@ -74,13 +75,19 @@ template <typename F, typename... PushArgs>
     Pushed{std::move(t), std::forward<PushArgs>(a)...};
   }
 void ThreadPool<TQ, Pushed>::submit_detach(F &&f, PushArgs &&...pushArgs) {
-  active_tasks_.fetch_add(1, std::memory_order_relaxed);
+  if constexpr (queues::Consuming<TQ, Pushed>) {
+    active_tasks_.fetch_add(1, std::memory_order_relaxed);
+  }
 
   try {
     queues::Task wrapped = [this, f = std::forward<F>(f)]() mutable {
       struct Guard {
         ThreadPool *pool;
-        ~Guard() { pool->task_finished(); }
+        ~Guard() {
+          if constexpr (queues::Consuming<TQ, Pushed>) {
+            pool->task_finished();
+          }
+        }
       } guard{this};
       try {
         f();
@@ -107,10 +114,14 @@ void ThreadPool<TQ, Pushed>::submit_detach(F &&f, PushArgs &&...pushArgs) {
     }
   } catch (const std::exception &e) { // TODO make it rethorw the exception
                                       // after decreasing the cunter
-    active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+    if constexpr (queues::Consuming<TQ, Pushed>) {
+      active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+    }
     std::println(std::cerr, "submit_detach: queue threw: {}", e.what());
   } catch (...) {
-    active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+    if constexpr (queues::Consuming<TQ, Pushed>) {
+      active_tasks_.fetch_sub(1, std::memory_order_relaxed);
+    }
     std::println(std::cerr, "submit_detach: queue threw unknown exception");
   }
 }

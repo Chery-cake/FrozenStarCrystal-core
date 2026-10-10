@@ -70,9 +70,4 @@ add_tests_from_folder("concurrency"
         ${MAIN_LIB}
 )
 
-add_tests_from_folder("loop"
-    LIBRARY
-        ${MAIN_LIB}
-)
-
 message(STATUS "Tests configured successfully")

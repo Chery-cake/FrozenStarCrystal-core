@@ -16,10 +16,8 @@ enum class AwaiterState : uint8_t {
   Waiting,     // awaiter suspended
 };
 
-inline std::atomic<size_t> g_live_coroutine_states{0};
-
 template <typename TQ, typename Pushed>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API CoroutineState
     : std::enable_shared_from_this<CoroutineState<TQ, Pushed>> {
 
@@ -41,15 +39,12 @@ struct FROZENSTARCRYSTAL_CORE_API CoroutineState
 
   std::optional<queues::PayloadOf<TQ, Pushed>> inherited_payload;
 
-  explicit CoroutineState(std::coroutine_handle<> h) : handle(h) {
-    g_live_coroutine_states.fetch_add(1, std::memory_order_relaxed);
-  }
+  explicit CoroutineState(std::coroutine_handle<> h) : handle(h) {}
   ~CoroutineState() {
     if (handle) {
       handle.destroy();
       handle = nullptr;
     }
-    g_live_coroutine_states.fetch_sub(1, std::memory_order_relaxed);
   }
 
   void do_resume() {
@@ -74,11 +69,11 @@ struct FROZENSTARCRYSTAL_CORE_API CoroutineState
 };
 
 template <typename TQ, typename Pushed>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 using SharedHandle = std::shared_ptr<CoroutineState<TQ, Pushed>>;
 
 template <typename TQ, typename Pushed>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 inline SharedHandle<TQ, Pushed> make_shared_handle(std::coroutine_handle<> h) {
   return std::make_shared<CoroutineState<TQ, Pushed>>(h);
 }

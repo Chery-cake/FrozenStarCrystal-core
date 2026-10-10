@@ -49,7 +49,13 @@ concept PriorityPolicy =
     };
 
 // Default: score is the entry's own priority
-template <PriorityEntry Entry> struct DefaultPriorityPolicy {
+template <PriorityEntry Entry>
+  requires(
+      requires(Task t) { Entry::make(std::move(t)); } ||
+      requires(typename Entry::Payload p, Task t) {
+        Entry::make(std::move(t), std::move(p));
+      })
+struct DefaultPriorityPolicy {
   using Score = PriorityOf<Entry>;
 
   Score score(const Entry &e) const { return priority_of(e); }

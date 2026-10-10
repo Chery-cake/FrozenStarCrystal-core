@@ -47,6 +47,10 @@ void enqueue(State &state, TQ &queue, queues::Task t, ArgsTuple &&args) {
           } else if constexpr (queues::PayloadEntryWithDefaultFactory<TQ,
                                                                       Pushed>) {
             queue.push(queue.make(std::move(t)));
+          } else if constexpr (std::default_initializable<
+                                   queues::PayloadOf<TQ, Pushed>>) {
+            queue.push(
+                queue.make(std::move(t), queues::PayloadOf<TQ, Pushed>{}));
           } else {
             static_assert(
                 queues::PayloadEntryWithDefaultFactory<TQ, Pushed>,
@@ -77,7 +81,7 @@ void enqueue(State &state, TQ &queue, queues::Task t) {
 }
 
 template <typename TQ, typename Pushed>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 inline void schedule_continuation(const SharedHandle<TQ, Pushed> &state,
                                   TQ *queue) {
   if (!state) {
@@ -127,7 +131,7 @@ inline void schedule_continuation(const SharedHandle<TQ, Pushed> &state,
 template <typename T, typename TQ, typename Pushed,
           template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct promise_type;
 
 // Trait and concept
@@ -136,7 +140,7 @@ template <typename T> struct is_promise_type : std::false_type {};
 template <typename T, typename TQ, typename Pushed,
           template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct is_promise_type<promise_type<T, TQ, Pushed, Task, SP>> : std::true_type {
 };
 
@@ -145,7 +149,7 @@ concept PromiseType = is_promise_type<T>::value;
 
 // Final suspend
 template <PromiseType promise, typename TQ, typename Pushed>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
   promise &p;
 
@@ -207,7 +211,7 @@ struct FROZENSTARCRYSTAL_CORE_API FinalAwaiter {
 template <typename T, typename TQ, typename Pushed,
           template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API promise_type {
   std::optional<T> result;
   std::exception_ptr exception;
@@ -252,7 +256,7 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type {
 template <typename TQ, typename Pushed,
           template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Pushed, Task, SP> {
   std::exception_ptr exception;
   std::shared_ptr<CoroutineState<TQ, Pushed>> state = nullptr;
@@ -291,7 +295,7 @@ struct FROZENSTARCRYSTAL_CORE_API promise_type<void, TQ, Pushed, Task, SP> {
 template <typename T, typename TQ, typename Pushed,
           template <typename, typename, policy::Suspend, typename> class Task,
           policy::Suspend SP>
-  requires(queues::Queue<TQ, Pushed>)
+  requires(queues::SchedulableQueue<TQ, Pushed>)
 struct FROZENSTARCRYSTAL_CORE_API awaiter {
   SharedHandle<TQ, Pushed> handle_;
 

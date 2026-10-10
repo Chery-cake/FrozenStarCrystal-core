@@ -9,7 +9,7 @@ import :queue;
 
 export namespace concurrency::queues {
 
-template <GeneralEntry Entry = Task> struct FROZENSTARCRYSTAL_CORE_API Fifo {
+template <GeneralEntry Entry> struct FROZENSTARCRYSTAL_CORE_API Fifo {
 private:
   std::queue<Entry> queue;
   mutable std::mutex mutex;

@@ -9,9 +9,10 @@ export namespace concurrency::queues {
 using Task = std::move_only_function<void()>;
 
 template <typename E>
-concept RetireableLoopEntry = requires(E &e) {
+concept RetireableLoopEntry = requires(E &e, Task t) {
   { e.invoke() } -> std::same_as<void>;
   { e.should_retire() } -> std::convertible_to<bool>;
+  E{std::move(t)};
 };
 
 template <typename E> inline void invoke_entry(E &e) {
@@ -45,13 +46,15 @@ concept Consuming =
     };
 
 template <typename Q, typename Pushed>
-concept Looping =
-    Base<Q, Pushed> && requires(Q &q, std::shared_ptr<Pushed> &t,
-                                const std::stop_token &st, size_t i) {
-      { q.peek(t, st) } -> std::same_as<bool>;
-      { q.clear() } -> std::same_as<void>;
-      { q.remove(i) } -> std::same_as<bool>;
-    };
+concept Looping = Base<Q, Pushed> &&
+                  requires(Q &q, std::shared_ptr<Pushed> &t,
+                           const std::stop_token &st, size_t i, Pushed &p) {
+                    { q.peek(t, st) } -> std::same_as<bool>;
+                    { q.clear() } -> std::same_as<void>;
+                    { q.remove(i) } -> std::same_as<bool>;
+                    { q.remove(t) } -> std::same_as<bool>;
+                    { q.release(p) } -> std::same_as<void>;
+                  };
 
 // --- The main concept: any of the behaviors ---
 template <typename Q, typename Pushed = Task>
@@ -92,14 +95,15 @@ concept CallablePayload =Payload<P>&&(
     requires(P p, Task t) { std::invoke(std::move(p), std::move(t)); });
 
 template <typename TQ, typename Pushed>
-concept PayloadEntry = Payload<Pushed> && requires(TQ q, const Pushed cp,
-                                                   Task t) {
-  Queue<TQ, Pushed>;
-  { cp.payload() } -> std::same_as<typename Pushed::Payload>;
-  {
-    q.make(std::move(t), std::move(std::declval<typename Pushed::Payload>()))
-  } -> std::same_as<Pushed>;
-};
+concept PayloadEntry =
+    Payload<Pushed> && Queue<TQ, Pushed> &&
+    requires(TQ q, const Pushed cp, Task t) {
+      { cp.payload() } -> std::same_as<typename Pushed::Payload>;
+      {
+        q.make(std::move(t),
+               std::move(std::declval<typename Pushed::Payload>()))
+      } -> std::same_as<Pushed>;
+    };
 
 template <typename TQ, typename Pushed>
 concept PayloadEntryWithDefaultFactory =
@@ -108,8 +112,7 @@ concept PayloadEntryWithDefaultFactory =
     };
 
 template <typename TQ, typename Pushed, typename... Args>
-concept DefaultConstructibleEntry =
-    requires { BraceConstructible<Pushed, Task, Args...>; };
+concept DefaultConstructibleEntry = BraceConstructible<Pushed, Task, Args...>;
 
 template <typename TQ, typename Pushed> struct PayloadOfImpl {
   using type = std::monostate;
