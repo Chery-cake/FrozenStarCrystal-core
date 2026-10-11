@@ -6,7 +6,7 @@ import concurrency_helper;
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_create() {
-  TEST("create");
+  ct::TEST("create");
 
   concurrency::pool::ThreadPool<TQ, Pushed> t{};
   assert(t.size() == std::thread::hardware_concurrency());
@@ -21,23 +21,23 @@ void test_create() {
   concurrency::pool::ThreadPool<TQ, Pushed> tp(5);
   assert(tp.size() == 5);
 
-  PASS();
+  ct::PASS();
 }
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_empty() {
-  TEST("wait empty");
+  ct::TEST("wait empty");
   concurrency::pool::ThreadPool<TQ, Pushed> t(2);
   t.wait();
   t.wait();
-  PASS();
+  ct::PASS();
 }
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_for_submit_detach() {
-  TEST("wait for submit_detach");
+  ct::TEST("wait for submit_detach");
 
   concurrency::pool::ThreadPool<TQ, Pushed> t(4);
   constexpr int kTasks = 64;
@@ -52,13 +52,13 @@ void test_wait_for_submit_detach() {
 
   t.wait();
   assert(completed.load() == kTasks);
-  PASS();
+  ct::PASS();
 }
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_repeated() {
-  TEST("wait repeated");
+  ct::TEST("wait repeated");
 
   concurrency::pool::ThreadPool<TQ, Pushed> t{4};
   constexpr int kIters = 2000;
@@ -69,13 +69,13 @@ void test_wait_repeated() {
     t.wait();
     assert(ran.load() == 1);
   });
-  PASS();
+  ct::PASS();
 }
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_concurrent_submit() {
-  TEST("wait concurrent submit");
+  ct::TEST("wait concurrent submit");
 
   concurrency::pool::ThreadPool<TQ, Pushed> t{4};
   constexpr int kProducers = 4;
@@ -98,15 +98,15 @@ void test_wait_concurrent_submit() {
   t.wait();
 
   assert(completed.load() == kProducers * kPerProducer);
-  PASS();
+  ct::PASS();
 }
 
 // ─── Future-returning submit: only valid when Pushed == Task ───────────
 // (submit calls submit_detach with an empty pack, so `Pushed{task}` must
-//  be valid. PriorityEntry{int, Task} cannot be built from a bare Task.)
+//  be valid. ct::PriorityEntry{int, Task} cannot be built from a bare Task.)
 
 template <concurrency::queues::Queue TQ> void test_submit() {
-  TEST("submit");
+  ct::TEST("submit");
 
   concurrency::pool::ThreadPool<TQ> t{};
 
@@ -143,11 +143,11 @@ template <concurrency::queues::Queue TQ> void test_submit() {
   });
   t.wait();
   assert(result.load() == 12);
-  PASS();
+  ct::PASS();
 }
 
 template <concurrency::queues::Queue TQ> void test_wait_with_futures() {
-  TEST("wait with futures");
+  ct::TEST("wait with futures");
   concurrency::pool::ThreadPool<TQ> t{4};
   std::atomic<int> sum{0};
   std::ranges::for_each(std::views::iota(0, 32), [&](int i) {
@@ -158,11 +158,11 @@ template <concurrency::queues::Queue TQ> void test_wait_with_futures() {
   for (int i = 0; i < 32; ++i)
     expected += i;
   assert(sum.load() == expected);
-  PASS();
+  ct::PASS();
 }
 
 template <concurrency::queues::Queue TQ> void test_wait_from_worker_throws() {
-  TEST("wait from worker throws");
+  ct::TEST("wait from worker throws");
   concurrency::pool::ThreadPool<TQ> t{2};
   std::atomic<bool> threw{false};
   auto fut = t.submit([&t, &threw] {
@@ -174,15 +174,15 @@ template <concurrency::queues::Queue TQ> void test_wait_from_worker_throws() {
   });
   fut.wait();
   assert(threw.load());
-  PASS();
+  ct::PASS();
 }
 
 // ─── Priority-specific: submit_detach with push args ───────────────────
 
 void test_priority_submit_order() {
-  TEST("priority submit order");
+  ct::TEST("priority submit order");
 
-  concurrency::pool::ThreadPool<PriorityQueue, PriorityEntry> t(1);
+  concurrency::pool::ThreadPool<ct::BasicPriorityQueue, ct::PriorityEntry> t(1);
 
   std::atomic<bool> gate_entered{false};
   std::atomic<bool> release{false};
@@ -225,13 +225,13 @@ void test_priority_submit_order() {
   }
   assert(order.front() == 10);
   assert(order.back() == 1);
-  PASS();
+  ct::PASS();
 }
 
 void test_priority_duplicates() {
-  TEST("priority duplicates");
+  ct::TEST("priority duplicates");
 
-  concurrency::pool::ThreadPool<PriorityQueue, PriorityEntry> t(1);
+  concurrency::pool::ThreadPool<ct::BasicPriorityQueue, ct::PriorityEntry> t(1);
   std::atomic<int> count{0};
 
   for (int i = 0; i < 3; ++i) {
@@ -240,13 +240,13 @@ void test_priority_duplicates() {
   t.submit_detach([&count] { count.fetch_add(100); }, 1);
   t.wait();
   assert(count.load() == 2 + 2 + 2 + 100);
-  PASS();
+  ct::PASS();
 }
 
 // ─── Looping-specific ──────────────────────────────────────────────────
 
 void test_loop_repeats() {
-  TEST("loop repeats");
+  ct::TEST("loop repeats");
 
   concurrency::pool::ThreadPool<
       concurrency::queues::Loop<concurrency::queues::Task>,
@@ -262,11 +262,11 @@ void test_loop_repeats() {
   assert(count->load() >= 5);
 
   t.queue()->clear();
-  PASS();
+  ct::PASS();
 }
 
 void test_loop_multiple_entries() {
-  TEST("loop multiple entries");
+  ct::TEST("loop multiple entries");
 
   concurrency::pool::ThreadPool<
       concurrency::queues::Loop<concurrency::queues::Task>,
@@ -287,12 +287,12 @@ void test_loop_multiple_entries() {
 
   t.queue()->clear();
   // t's destructor joins the worker before this frame's shared_ptrs die.
-  PASS();
+  ct::PASS();
 }
 
 // ─── Drivers ───────────────────────────────────────────────────────────
 
-using Fifo = concurrency::queues::Fifo<>;
+using Fifo = concurrency::queues::Fifo<concurrency::queues::Task>;
 using Loop = concurrency::queues::Loop<concurrency::queues::Task>;
 using Task = concurrency::queues::Task;
 
@@ -314,7 +314,7 @@ static void fifo_suite() {
 }
 
 static void priority_suite() {
-  generic_suite<PriorityQueue, PriorityEntry>();
+  generic_suite<ct::BasicPriorityQueue, ct::PriorityEntry>();
   test_priority_submit_order();
   test_priority_duplicates();
 }
@@ -344,6 +344,7 @@ int main() {
   priority_suite();
   loop_suite();
 
-  std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
-  return (tests_passed == tests_run) ? 0 : 1;
+  std::println("\n{}/{} tests passed", ct::tests_passed.load(),
+               ct::tests_run.load());
+  return (ct::tests_passed == ct::tests_run) ? 0 : 1;
 }

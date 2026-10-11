@@ -9,10 +9,11 @@ export namespace concurrency::queues {
 using Task = std::move_only_function<void()>;
 
 template <typename E>
-concept RetireableLoopEntry = requires(E &e, Task t) {
+concept RetireableLoopEntry = requires(E &e, const E &ce, Task t) {
   { e.invoke() } -> std::same_as<void>;
-  { e.should_retire() } -> std::convertible_to<bool>;
+  { ce.should_retire() } -> std::convertible_to<bool>;
   E{std::move(t)};
+  E{typename E::Transient{}, std::move(t)};
 };
 
 template <typename E> inline void invoke_entry(E &e) {
@@ -29,6 +30,12 @@ template <typename E> inline bool entry_should_retire(const E &e) {
     return e.should_retire();
   }
 }
+
+template <typename TQ, typename Pushed>
+concept TransientCapableQueue =
+    RetireableLoopEntry<Pushed> && requires(TQ &q, Task t) {
+      { q.push_transient(std::move(t)) };
+    };
 
 // --- Base: operations *every* queue has, regardless of behavior ---
 template <typename Q, typename Pushed = Task>
@@ -74,7 +81,8 @@ template <typename TQ, typename Pushed> constexpr Behaviour behaviour_of() {
 }
 
 template <typename TQ, typename Pushed>
-concept SchedulableQueue = Consuming<TQ, Pushed> || RetireableLoopEntry<Pushed>;
+concept SchedulableQueue =
+    Consuming<TQ, Pushed> || TransientCapableQueue<TQ, Pushed>;
 
 // A queue that exposes make(Task) and, when the entry has a Payload,
 // make(Task, Payload).
@@ -98,7 +106,6 @@ template <typename TQ, typename Pushed>
 concept PayloadEntry =
     Payload<Pushed> && Queue<TQ, Pushed> &&
     requires(TQ q, const Pushed cp, Task t) {
-      { cp.payload() } -> std::same_as<typename Pushed::Payload>;
       {
         q.make(std::move(t),
                std::move(std::declval<typename Pushed::Payload>()))
@@ -119,7 +126,7 @@ template <typename TQ, typename Pushed> struct PayloadOfImpl {
 };
 
 template <typename TQ, typename Pushed>
-  requires(PayloadEntry<TQ, Pushed>)
+  requires(Payload<Pushed> && Queue<TQ, Pushed>)
 struct PayloadOfImpl<TQ, Pushed> {
   using type = typename Pushed::Payload;
 };
@@ -130,6 +137,13 @@ using PayloadOf = typename PayloadOfImpl<TQ, Pushed>::type;
 template <typename TQ, typename Pushed, typename... Args>
 concept PayloadEntryFrom = PayloadEntry<TQ, Pushed> &&
                            BraceConstructible<PayloadOf<TQ, Pushed>, Args...>;
+
+template <typename TQ, typename Pushed>
+concept TransientPayloadCapable =
+    Payload<Pushed> && Queue<TQ, Pushed> &&
+    requires(Task t, typename Pushed::Payload p) {
+      Pushed{typename Pushed::Transient{}, std::move(t), std::move(p)};
+    };
 
 template <typename Entry>
 concept GeneralEntry =

@@ -33,6 +33,32 @@ void enqueue(State &state, TQ &queue, queues::Task t, ArgsTuple &&args) {
       [&](auto &&...a) {
         constexpr size_t nargs = sizeof...(a);
 
+        if constexpr (queues::TransientCapableQueue<TQ, Pushed>) {
+          if constexpr (queues::TransientPayloadCapable<TQ, Pushed>) {
+            using Payload = queues::PayloadOf<TQ, Pushed>;
+
+            if (state->inherited_payload) {
+              queue.push_transient(std::move(t), *state->inherited_payload);
+            } else if constexpr (nargs > 0 &&
+                                 queues::BraceConstructible<
+                                     Payload, std::decay_t<decltype(a)>...>) {
+              Payload p{std::forward<decltype(a)>(a)...};
+              state->inherited_payload = p;
+              queue.push_transient(std::move(t), std::move(p));
+            } else if constexpr (std::default_initializable<Payload>) {
+              queue.push_transient(std::move(t), Payload{});
+            } else {
+              static_assert(!std::is_same_v<Payload, Payload>,
+                            "Transient entry carries a payload, but none "
+                            "creation method is available; call "
+                            "with_payload(...) or pass args to schedule(...).");
+            }
+          } else {
+            queue.push_transient(std::move(t));
+          }
+          return;
+        }
+
         if constexpr (queues::PayloadEntryFrom<TQ, Pushed,
                                                std::decay_t<decltype(a)>...> &&
                       nargs > 0) {

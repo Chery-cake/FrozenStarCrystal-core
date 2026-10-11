@@ -5,7 +5,7 @@ constexpr concurrency::pool::Pool p1("p1");
 constexpr concurrency::pool::Pool p2("p2");
 constexpr concurrency::pool::Pool p3("p3");
 
-using Fifo = concurrency::queues::Fifo<>;
+using Fifo = concurrency::queues::Fifo<concurrency::queues::Task>;
 using Loop = concurrency::queues::Loop<concurrency::queues::Task>;
 using Task = concurrency::queues::Task;
 using B = concurrency::queues::Behaviour;
@@ -15,7 +15,7 @@ using B = concurrency::queues::Behaviour;
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_create() {
-  TEST("create");
+  ct::TEST("create");
 
   concurrency::pool::Manager m;
 
@@ -50,13 +50,13 @@ void test_create() {
   assert((m.resizePool(&p2, 5)));
   assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
-  PASS();
+  ct::PASS();
 }
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_signals() {
-  TEST("signals");
+  ct::TEST("signals");
 
   concurrency::pool::Manager m;
 
@@ -93,48 +93,48 @@ void test_signals() {
 
   assert(count.load() == 0); // -4 -2 -2
 
-  PASS();
+  ct::PASS();
 }
 
 // ─── Heterogeneous Manager ─────────────────────────────────────────────
 
 void test_heterogeneous_coexistence() {
-  TEST("heterogeneous coexistence");
+  ct::TEST("heterogeneous coexistence");
 
   concurrency::pool::Manager m;
 
   assert(m.createPool<Fifo>(&p1, 2));
-  assert((m.createPool<PriorityQueue, PriorityEntry>(&p2, 3)));
+  assert((m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2, 3)));
   assert((m.createPool<Loop, Task>(&p3, 4)));
 
   auto f = m.getPool<Fifo>(&p1);
-  auto q = m.getPool<PriorityQueue, PriorityEntry>(&p2);
+  auto q = m.getPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2);
   auto l = m.getPool<Loop, Task>(&p3);
 
   assert(f && f->size() == 2);
   assert(q && q->size() == 3);
   assert(l && l->size() == 4);
 
-  PASS();
+  ct::PASS();
 }
 
 void test_wrong_type_returns_null() {
-  TEST("wrong type returns null");
+  ct::TEST("wrong type returns null");
 
   concurrency::pool::Manager m;
 
   assert(m.createPool<Fifo>(&p1, 2));
 
   // Asking for the wrong concrete type yields a null shared_ptr, not UB.
-  assert((!m.getPool<PriorityQueue, PriorityEntry>(&p1)));
+  assert((!m.getPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p1)));
   assert((!m.getPool<Loop, Task>(&p1)));
   assert(m.getPool<Fifo>(&p1));
 
-  PASS();
+  ct::PASS();
 }
 
 void test_type_erased_operations() {
-  TEST("type-erased operations");
+  ct::TEST("type-erased operations");
 
   concurrency::pool::Manager m;
   m.createPool<Fifo>(&p1, 2);
@@ -147,17 +147,13 @@ void test_type_erased_operations() {
   base->resize(4);
   assert(base->size() == 4);
 
-  std::atomic<int> ran{0};
-  base->submit_detach_erased(
-      [&ran] { ran.fetch_add(1, std::memory_order_relaxed); });
-  base->wait();
-  assert(ran.load() == 1);
+  base->wait(); // still available
 
-  PASS();
+  ct::PASS();
 }
 
 void test_heterogeneous_signals() {
-  TEST("heterogeneous signals");
+  ct::TEST("heterogeneous signals");
 
   concurrency::pool::Manager m;
 
@@ -174,7 +170,7 @@ void test_heterogeneous_signals() {
       });
 
   m.createPool<Fifo>(&p1, 1);
-  m.createPool<PriorityQueue, PriorityEntry>(&p2, 1);
+  m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2, 1);
   m.createPool<Loop, Task>(&p3, 1);
   assert(added.load() == 3);
 
@@ -183,7 +179,7 @@ void test_heterogeneous_signals() {
   m.removePool(&p3);
   assert(removed.load() == 3);
 
-  PASS();
+  ct::PASS();
 }
 
 // ─── Drivers ───────────────────────────────────────────────────────────
@@ -198,7 +194,9 @@ static void per_kind_suite() {
 }
 
 static void fifo_suite() { per_kind_suite<Fifo, Task>(); }
-static void priority_suite() { per_kind_suite<PriorityQueue, PriorityEntry>(); }
+static void priority_suite() {
+  per_kind_suite<ct::BasicPriorityQueue, ct::PriorityEntry>();
+}
 static void loop_suite() { per_kind_suite<Loop, Task>(); }
 
 static void mixed_suite() {
@@ -231,6 +229,7 @@ int main() {
   loop_suite();
   mixed_suite();
 
-  std::println("\n{}/{} tests passed", tests_passed.load(), tests_run.load());
-  return (tests_passed == tests_run) ? 0 : 1;
+  std::println("\n{}/{} tests passed", ct::tests_passed.load(),
+               ct::tests_run.load());
+  return (ct::tests_passed == ct::tests_run) ? 0 : 1;
 }

@@ -38,6 +38,24 @@ public:
     wake.notify_one();
   }
 
+  template <typename... Args>
+    requires requires(Entry e, Task t2, Args &&...args) {
+      Entry{typename Entry::Transient{}, std::move(t2),
+            std::forward<Args>(args)...};
+    }
+  void push_transient(Task t, Args &&...args) {
+    {
+      std::scoped_lock lock(mutex);
+      queue.push_back(std::make_shared<Entry>(typename Entry::Transient{},
+                                              std::move(t),
+                                              std::forward<Args>(args)...));
+      size.fetch_add(1, std::memory_order_release);
+      available.fetch_add(1, std::memory_order_release);
+    }
+    wake.fetch_add(1, std::memory_order_release);
+    wake.notify_one();
+  }
+
   bool peek(std::shared_ptr<Entry> &entry, const std::stop_token &stoken) {
     std::optional<std::stop_callback<std::function<void()>>> cb;
     while (true) {
