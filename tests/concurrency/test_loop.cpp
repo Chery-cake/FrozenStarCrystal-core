@@ -3,11 +3,127 @@ import concurrency_helper;
 
 // ─── Loop<Task>: round-robin, plain pool ─────────────────────────────
 
-void test_loop_round_robin() { /* cursor wraps, same entry re-peeked */ }
-void test_loop_single() { /* size 1, cursor pin */ }
-void test_loop_clear() { /* clear resets cursor */ }
-void test_loop_remove() { /* swap-and-pop */ }
-void test_loop_stop_is_immediate() { /* stop doesn't drain */ }
+void test_loop_round_robin() {
+  ct::TEST("loop<Task>: round robin");
+  concurrency::queues::Loop<ct::Task> q;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::vector<int> order;
+  q.push([&] { order.push_back(1); });
+  q.push([&] { order.push_back(2); });
+  q.push([&] { order.push_back(3); });
+
+  for (int round = 0; round < 3; ++round)
+    for (int i = 0; i < 3; ++i) {
+      std::shared_ptr<ct::Task> sp;
+      assert(q.peek(sp, st));
+      (*sp)();
+      q.release(*sp);
+    }
+
+  assert((order == std::vector<int>{1, 2, 3, 1, 2, 3, 1, 2, 3}));
+  ss.request_stop();
+  ct::PASS();
+}
+
+void test_loop_single() {
+  ct::TEST("loop<Task>: single");
+  concurrency::queues::Loop<ct::Task> q;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::atomic<int> count{0};
+  q.push([&] { count.fetch_add(1); });
+
+  for (int i = 0; i < 5; ++i) {
+    std::shared_ptr<ct::Task> sp;
+    assert(q.peek(sp, st));
+    (*sp)();
+    q.release(*sp);
+  }
+  assert(count.load() == 5);
+  ss.request_stop();
+  ct::PASS();
+}
+
+void test_loop_clear() {
+  ct::TEST("loop<Task>: clear");
+  concurrency::queues::Loop<ct::Task> q;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  q.push([] {});
+  q.push([] {});
+  q.push([] {});
+  assert(!q.empty());
+  q.clear();
+  assert(q.empty());
+
+  std::vector<int> order;
+  q.push([&] { order.push_back(10); });
+  q.push([&] { order.push_back(20); });
+
+  for (int i = 0; i < 2; ++i) {
+    std::shared_ptr<ct::Task> sp;
+    assert(q.peek(sp, st));
+    (*sp)();
+    q.release(*sp);
+  }
+  assert((order == std::vector<int>{10, 20}));
+  ss.request_stop();
+  ct::PASS();
+}
+
+void test_loop_remove() {
+  ct::TEST("loop<Task>: remove");
+  concurrency::queues::Loop<ct::Task> q;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::array<std::atomic<int>, 3> hits{};
+  q.push([&] { hits[0].fetch_add(1); });
+  q.push([&] { hits[1].fetch_add(1); });
+  q.push([&] { hits[2].fetch_add(1); });
+
+  assert(q.remove(1));
+  assert(!q.remove(999));
+
+  for (int i = 0; i < 2; ++i) {
+    std::shared_ptr<ct::Task> sp;
+    assert(q.peek(sp, st));
+    (*sp)();
+    q.release(*sp);
+  }
+  assert(hits[0].load() == 1);
+  assert(hits[1].load() == 0);
+  assert(hits[2].load() == 1);
+
+  ss.request_stop();
+  ct::PASS();
+}
+
+void test_loop_stop_is_immediate() {
+  ct::TEST("loop<Task>: stop is immediate");
+  concurrency::queues::Loop<ct::Task> q;
+  std::stop_source ss;
+  auto st = ss.get_token();
+
+  std::atomic<int> hits{0};
+  q.push([&] { hits.fetch_add(1); });
+  q.push([&] { hits.fetch_add(10); });
+
+  std::shared_ptr<ct::Task> sp;
+  assert(q.peek(sp, st));
+  (*sp)();
+  assert(hits.load() == 1);
+
+  ss.request_stop();
+  assert(!q.peek(sp, st));
+  assert(!q.empty()); // stop doesn't clear the queue
+  assert(hits.load() == 1);
+  ct::PASS();
+}
 
 void test_loop_pool_repeats() {
   ct::TEST("loop<Task>: pool repeats");

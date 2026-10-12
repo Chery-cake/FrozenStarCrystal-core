@@ -4,13 +4,10 @@ import concurrency_helper;
 constexpr concurrency::pool::Pool p1("p1");
 constexpr concurrency::pool::Pool p2("p2");
 constexpr concurrency::pool::Pool p3("p3");
+constexpr concurrency::pool::Pool p4("p4");
+constexpr concurrency::pool::Pool p5("p5");
 
-using Fifo = concurrency::queues::Fifo<concurrency::queues::Task>;
-using Loop = concurrency::queues::Loop<concurrency::queues::Task>;
-using Task = concurrency::queues::Task;
-using B = concurrency::queues::Behaviour;
-
-// ─── Generic per-kind suite ────────────────────────────────────────────
+// ─── Generic per-kind suite ─────────────────────────────────────────
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
@@ -18,7 +15,6 @@ void test_create() {
   ct::TEST("create");
 
   concurrency::pool::Manager m;
-
   assert((m.createPool<TQ, Pushed>(&p1)));
   assert((!m.createPool<TQ, Pushed>(&p1)));
 
@@ -37,16 +33,13 @@ void test_create() {
           (std::thread::hardware_concurrency() - 5)));
   assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
-  // Cannot split a pool whose size <= extract request.
   assert((!m.split<TQ, Pushed>(&p2, &p3, 5)));
   assert((!m.getPool<TQ, Pushed>(&p3)));
 
   assert((!m.resizePool(&p2, 0)));
   assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
-
   assert((m.resizePool(&p2, 3)));
   assert((m.getPool<TQ, Pushed>(&p2)->size() == 3));
-
   assert((m.resizePool(&p2, 5)));
   assert((m.getPool<TQ, Pushed>(&p2)->size() == 5));
 
@@ -59,61 +52,65 @@ void test_signals() {
   ct::TEST("signals");
 
   concurrency::pool::Manager m;
-
   std::atomic<int> count = 0;
 
   {
     auto add = [&count](auto, auto tp) { count += tp->size(); };
     auto rem = [&count](auto, auto tp) { count -= tp->size(); };
     auto res = [&count](auto, auto old, auto ns) { count += (old - ns); };
-
     auto r1 = m.onPoolAdded.connect(add);
     auto r2 = m.onPoolRemoved.connect(rem);
     auto r3 = m.onPoolResized.connect(res);
   }
 
   assert(count.load() == 0);
-
   m.createPool<TQ, Pushed>(&p1, 2);
   m.createPool<TQ, Pushed>(&p2, 4);
-
-  assert(count.load() == 6); // +2 +4
+  assert(count.load() == 6);
 
   m.split<TQ, Pushed>(&p2, &p3, 2);
-
-  assert(count.load() == 10); // resize +2, add +2
+  assert(count.load() == 10);
 
   m.resizePool(&p1, 4);
-
-  assert(count.load() == 8); // resize +(2-4) = -2
+  assert(count.load() == 8);
 
   m.removePool(&p1);
   m.removePool(&p2);
   m.removePool(&p3);
-
-  assert(count.load() == 0); // -4 -2 -2
+  assert(count.load() == 0);
 
   ct::PASS();
 }
 
-// ─── Heterogeneous Manager ─────────────────────────────────────────────
+template <typename TQ, typename Pushed>
+  requires(concurrency::queues::Queue<TQ, Pushed>)
+static void per_kind_suite() {
+  std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {
+    test_create<TQ, Pushed>();
+    test_signals<TQ, Pushed>();
+  });
+}
+
+// ─── Heterogeneous manager tests ────────────────────────────────────
 
 void test_heterogeneous_coexistence() {
   ct::TEST("heterogeneous coexistence");
 
   concurrency::pool::Manager m;
 
-  assert(m.createPool<Fifo>(&p1, 2));
-  assert((m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2, 3)));
-  assert((m.createPool<Loop, Task>(&p3, 4)));
+  assert(m.createPool<ct::FifoTask>(&p1, 2));
+  assert((m.createPool<ct::FifoPayload, ct::SimplePayloadEntry>(&p2, 3)));
+  // p2 already taken; different type under the same tag must be refused.
+  assert((!m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2, 3)));
+  assert((m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p4, 3)));
+  assert((m.createPool<ct::LoopOneShot, ct::OneShotLoopEntry>(&p3, 4)));
 
-  auto f = m.getPool<Fifo>(&p1);
-  auto q = m.getPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2);
-  auto l = m.getPool<Loop, Task>(&p3);
-
-  assert(f && f->size() == 2);
-  assert(q && q->size() == 3);
-  assert(l && l->size() == 4);
+  assert(m.getPool<ct::FifoTask>(&p1)->size() == 2);
+  assert(
+      (m.getPool<ct::FifoPayload, ct::SimplePayloadEntry>(&p2)->size() == 3));
+  assert(
+      (m.getPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p4)->size() == 3));
+  assert((m.getPool<ct::LoopOneShot, ct::OneShotLoopEntry>(&p3)->size() == 4));
 
   ct::PASS();
 }
@@ -122,13 +119,12 @@ void test_wrong_type_returns_null() {
   ct::TEST("wrong type returns null");
 
   concurrency::pool::Manager m;
+  assert(m.createPool<ct::FifoTask>(&p1, 2));
 
-  assert(m.createPool<Fifo>(&p1, 2));
-
-  // Asking for the wrong concrete type yields a null shared_ptr, not UB.
   assert((!m.getPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p1)));
-  assert((!m.getPool<Loop, Task>(&p1)));
-  assert(m.getPool<Fifo>(&p1));
+  assert((!m.getPool<ct::LoopOneShot, ct::OneShotLoopEntry>(&p1)));
+  assert((!m.getPool<ct::FifoPayload, ct::SimplePayloadEntry>(&p1)));
+  assert(m.getPool<ct::FifoTask>(&p1));
 
   ct::PASS();
 }
@@ -137,17 +133,17 @@ void test_type_erased_operations() {
   ct::TEST("type-erased operations");
 
   concurrency::pool::Manager m;
-  m.createPool<Fifo>(&p1, 2);
+  m.createPool<ct::Fifo>(&p1, 2);
 
   auto base = m.getPoolBase(&p1);
   assert(base);
   assert(base->size() == 2);
-  assert(base->behaviour() == B::Consuming);
+  assert(base->behaviour() == ct::B::Consuming);
 
   base->resize(4);
   assert(base->size() == 4);
 
-  base->wait(); // still available
+  base->wait();
 
   ct::PASS();
 }
@@ -169,35 +165,43 @@ void test_heterogeneous_signals() {
         removed.fetch_add(1);
       });
 
-  m.createPool<Fifo>(&p1, 1);
-  m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p2, 1);
-  m.createPool<Loop, Task>(&p3, 1);
-  assert(added.load() == 3);
+  assert(m.createPool<ct::FifoTask>(&p1, 1));
+  assert((m.createPool<ct::FifoPayload, ct::SimplePayloadEntry>(&p2, 1)));
+  assert((m.createPool<ct::BasicPriorityQueue, ct::PriorityEntry>(&p4, 1)));
+  assert((m.createPool<ct::PayloadPriorityQueue, ct::PayloadPriorityEntry>(&p5,
+                                                                           1)));
+  assert((m.createPool<ct::LoopOneShot, ct::OneShotLoopEntry>(&p3, 1)));
+  assert(added.load() == 5);
 
   m.removePool(&p1);
   m.removePool(&p2);
   m.removePool(&p3);
-  assert(removed.load() == 3);
+  m.removePool(&p4);
+  m.removePool(&p5);
+  assert(removed.load() == 5);
 
   ct::PASS();
 }
 
-// ─── Drivers ───────────────────────────────────────────────────────────
+// ─── Drivers ────────────────────────────────────────────────────────
 
-template <typename TQ, typename Pushed>
-  requires(concurrency::queues::Queue<TQ, Pushed>)
-static void per_kind_suite() {
-  std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {
-    test_create<TQ, Pushed>();
-    test_signals<TQ, Pushed>();
-  });
+static void fifo_task_suite() { per_kind_suite<ct::FifoTask, ct::Task>(); }
+static void fifo_payload_suite() {
+  per_kind_suite<ct::FifoPayload, ct::SimplePayloadEntry>();
 }
-
-static void fifo_suite() { per_kind_suite<Fifo, Task>(); }
 static void priority_suite() {
   per_kind_suite<ct::BasicPriorityQueue, ct::PriorityEntry>();
 }
-static void loop_suite() { per_kind_suite<Loop, Task>(); }
+static void priority_payload_suite() {
+  per_kind_suite<ct::PayloadPriorityQueue, ct::PayloadPriorityEntry>();
+}
+static void loop_task_suite() { per_kind_suite<ct::LoopTask, ct::Task>(); }
+static void loop_oneshot_suite() {
+  per_kind_suite<ct::LoopOneShot, ct::OneShotLoopEntry>();
+}
+static void loop_payload_suite() {
+  per_kind_suite<ct::LoopPayload, ct::PayloadLoopEntry>();
+}
 
 static void mixed_suite() {
   std::ranges::for_each(std::views::iota(0, 5), [](uint32_t) {
@@ -216,17 +220,26 @@ template <auto Suite> static void ex(uint32_t repeats) {
 int main() {
   std::println("=== Concurrency Manager Tests ===");
 
-  std::array<std::jthread, 4> threads;
-  threads[0] = std::jthread(ex<fifo_suite>, 5);
-  threads[1] = std::jthread(ex<priority_suite>, 5);
-  threads[2] = std::jthread(ex<loop_suite>, 5);
-  threads[3] = std::jthread(ex<mixed_suite>, 5);
+  std::array<std::jthread, 8> threads;
+  threads[0] = std::jthread(ex<fifo_task_suite>, 5);
+  threads[1] = std::jthread(ex<fifo_payload_suite>, 5);
+  threads[2] = std::jthread(ex<priority_suite>, 5);
+  threads[3] = std::jthread(ex<priority_payload_suite>, 5);
+  threads[4] = std::jthread(ex<loop_task_suite>, 5);
+  threads[5] = std::jthread(ex<loop_oneshot_suite>, 5);
+  threads[6] = std::jthread(ex<loop_payload_suite>, 5);
+  threads[7] = std::jthread(ex<mixed_suite>, 5);
   for (auto &t : threads)
     t.join();
 
-  fifo_suite();
+  // Also run once on the main thread for clean sequencing.
+  fifo_task_suite();
+  fifo_payload_suite();
   priority_suite();
-  loop_suite();
+  priority_payload_suite();
+  loop_task_suite();
+  loop_oneshot_suite();
+  loop_payload_suite();
   mixed_suite();
 
   std::println("\n{}/{} tests passed", ct::tests_passed.load(),

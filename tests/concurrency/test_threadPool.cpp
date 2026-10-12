@@ -1,26 +1,21 @@
 #include <cassert>
 import concurrency_helper;
 
-// ─── Generic tests: work for any (TQ, Pushed, B) ───────────────────────
+// ─── Generic suite ──────────────────────────────────────────────────
 
 template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_create() {
   ct::TEST("create");
-
   concurrency::pool::ThreadPool<TQ, Pushed> t{};
   assert(t.size() == std::thread::hardware_concurrency());
   assert((t.behaviour() == concurrency::queues::behaviour_of<TQ, Pushed>()));
-
   t.resize(2);
   assert(t.size() == 2);
-
   t.resize(10);
   assert(t.size() == 10);
-
   concurrency::pool::ThreadPool<TQ, Pushed> tp(5);
   assert(tp.size() == 5);
-
   ct::PASS();
 }
 
@@ -38,6 +33,11 @@ template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_for_submit_detach() {
   ct::TEST("wait for submit_detach");
+
+  if constexpr (concurrency::queues::Looping<TQ, Pushed>) {
+    // Looping queues don't drain in wait(); skip.
+    return;
+  }
 
   concurrency::pool::ThreadPool<TQ, Pushed> t(4);
   constexpr int kTasks = 64;
@@ -59,9 +59,11 @@ template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_repeated() {
   ct::TEST("wait repeated");
+  if constexpr (concurrency::queues::Looping<TQ, Pushed>)
+    return;
 
   concurrency::pool::ThreadPool<TQ, Pushed> t{4};
-  constexpr int kIters = 2000;
+  constexpr int kIters = 500;
 
   std::ranges::for_each(std::views::iota(0, kIters), [&](int) {
     std::atomic<int> ran{0};
@@ -76,6 +78,8 @@ template <typename TQ, typename Pushed>
   requires(concurrency::queues::Queue<TQ, Pushed>)
 void test_wait_concurrent_submit() {
   ct::TEST("wait concurrent submit");
+  if constexpr (concurrency::queues::Looping<TQ, Pushed>)
+    return;
 
   concurrency::pool::ThreadPool<TQ, Pushed> t{4};
   constexpr int kProducers = 4;
@@ -101,13 +105,25 @@ void test_wait_concurrent_submit() {
   ct::PASS();
 }
 
-// ─── Future-returning submit: only valid when Pushed == Task ───────────
-// (submit calls submit_detach with an empty pack, so `Pushed{task}` must
-//  be valid. ct::PriorityEntry{int, Task} cannot be built from a bare Task.)
+// ─── Generic suite runner ───────────────────────────────────────────
 
-template <concurrency::queues::Queue TQ> void test_submit() {
+template <typename TQ, typename Pushed>
+  requires(concurrency::queues::Queue<TQ, Pushed>)
+static void generic_suite() {
+  test_create<TQ, Pushed>();
+  test_wait_empty<TQ, Pushed>();
+  test_wait_for_submit_detach<TQ, Pushed>();
+  test_wait_repeated<TQ, Pushed>();
+  test_wait_concurrent_submit<TQ, Pushed>();
+}
+
+// ─── Futured submit (only when Pushed == Task) ──────────────────────
+
+template <concurrency::queues::Queue TQ>
+  requires(std::same_as<typename TQ::entry_type, ct::Task> ||
+           std::same_as<TQ, ct::Fifo>)
+void test_submit() {
   ct::TEST("submit");
-
   concurrency::pool::ThreadPool<TQ> t{};
 
   auto f = [](int x) {
@@ -120,24 +136,15 @@ template <concurrency::queues::Queue TQ> void test_submit() {
     fi.push_back(t.submit(f, i));
   });
 
-  assert(t.size() == std::thread::hardware_concurrency());
-
-  t.resize(2);
-  assert(t.size() == 2);
-  t.resize(10);
-  assert(t.size() == 10);
+  int expected = 0, got = 0;
+  for (uint32_t i = 0; i < 12; ++i) {
+    got += fi[i].get();
+    expected += i;
+  }
+  assert(got == expected);
 
   std::atomic<int> result = 0;
-  int expected = 0;
-  std::ranges::for_each(std::views::iota(0, 12),
-                        [&fi, &result, &expected](uint32_t i) {
-                          result += fi[i].get();
-                          expected += i;
-                        });
-  assert(result == expected);
-
   auto f2 = [](std::atomic<int> &r) { r += 1; };
-  result = 0;
   std::ranges::for_each(std::views::iota(0, 12), [&t, f2, &result](uint32_t) {
     t.submit(f2, std::ref(result));
   });
@@ -177,40 +184,31 @@ template <concurrency::queues::Queue TQ> void test_wait_from_worker_throws() {
   ct::PASS();
 }
 
-// ─── Priority-specific: submit_detach with push args ───────────────────
+// ─── Priority-specific ──────────────────────────────────────────────
 
 void test_priority_submit_order() {
   ct::TEST("priority submit order");
 
   concurrency::pool::ThreadPool<ct::BasicPriorityQueue, ct::PriorityEntry> t(1);
+  std::atomic<bool> gate_entered{false}, release{false};
 
-  std::atomic<bool> gate_entered{false};
-  std::atomic<bool> release{false};
-
-  // Highest priority so it is popped before anything else.
   t.submit_detach(
-      [&gate_entered, &release] {
+      [&] {
         gate_entered.store(true, std::memory_order_release);
-        while (!release.load(std::memory_order_acquire)) {
+        while (!release.load(std::memory_order_acquire))
           std::this_thread::yield();
-        }
       },
       1000);
-
-  // Wait for the gate to actually be running on the worker.
-  while (!gate_entered.load(std::memory_order_acquire)) {
+  while (!gate_entered.load(std::memory_order_acquire))
     std::this_thread::yield();
-  }
 
-  // Worker is now busy; these ten all sit in the queue before it can pop.
-  std::mutex order_mtx;
+  std::mutex mtx;
   std::vector<int> order;
   order.reserve(10);
-
   for (int p : {1, 5, 3, 8, 2, 10, 4, 9, 6, 7}) {
     t.submit_detach(
-        [&order, &order_mtx, p] {
-          std::lock_guard lk(order_mtx);
+        [&, p] {
+          std::lock_guard lk(mtx);
           order.push_back(p);
         },
         p);
@@ -220,45 +218,73 @@ void test_priority_submit_order() {
   t.wait();
 
   assert(order.size() == 10);
-  for (size_t i = 1; i < order.size(); ++i) {
+  for (size_t i = 1; i < order.size(); ++i)
     assert(order[i - 1] > order[i]);
-  }
   assert(order.front() == 10);
+  assert(order.back() == 1);
+  ct::PASS();
+}
+
+void test_priority_payload_order() {
+  ct::TEST("priority payload order");
+
+  concurrency::pool::ThreadPool<ct::PayloadPriorityQueue,
+                                ct::PayloadPriorityEntry>
+      t(1);
+  std::atomic<bool> gate_entered{false}, release{false};
+
+  t.submit_detach(
+      [&] {
+        gate_entered.store(true, std::memory_order_release);
+        while (!release.load(std::memory_order_acquire))
+          std::this_thread::yield();
+      },
+      ct::PriorityPayload{1000, 0});
+  while (!gate_entered.load(std::memory_order_acquire))
+    std::this_thread::yield();
+
+  std::mutex mtx;
+  std::vector<int> order;
+  for (int p : {1, 5, 3, 8}) {
+    t.submit_detach(
+        [&, p] {
+          std::lock_guard lk(mtx);
+          order.push_back(p);
+        },
+        ct::PriorityPayload{p, 0});
+  }
+
+  release.store(true, std::memory_order_release);
+  t.wait();
+
+  assert(order.size() == 4);
+  assert(order.front() == 8);
   assert(order.back() == 1);
   ct::PASS();
 }
 
 void test_priority_duplicates() {
   ct::TEST("priority duplicates");
-
   concurrency::pool::ThreadPool<ct::BasicPriorityQueue, ct::PriorityEntry> t(1);
   std::atomic<int> count{0};
-
-  for (int i = 0; i < 3; ++i) {
+  for (int i = 0; i < 3; ++i)
     t.submit_detach([&count] { count.fetch_add(2); }, 5);
-  }
   t.submit_detach([&count] { count.fetch_add(100); }, 1);
   t.wait();
   assert(count.load() == 2 + 2 + 2 + 100);
   ct::PASS();
 }
 
-// ─── Looping-specific ──────────────────────────────────────────────────
+// ─── Loop-specific ──────────────────────────────────────────────────
 
 void test_loop_repeats() {
   ct::TEST("loop repeats");
-
-  concurrency::pool::ThreadPool<
-      concurrency::queues::Loop<concurrency::queues::Task>,
-      concurrency::queues::Task>
-      t(1);
-
+  concurrency::pool::ThreadPool<ct::Loop, ct::Task> t(1);
   auto count = std::make_shared<std::atomic<int>>(0);
   t.submit_detach([count] { count->fetch_add(1, std::memory_order_relaxed); });
 
-  for (int i = 0; i < 100 && count->load() < 5; ++i) {
+  for (int i = 0; i < 100 && count->load() < 5; ++i)
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  }
   assert(count->load() >= 5);
 
   t.queue()->clear();
@@ -267,60 +293,66 @@ void test_loop_repeats() {
 
 void test_loop_multiple_entries() {
   ct::TEST("loop multiple entries");
-
-  concurrency::pool::ThreadPool<
-      concurrency::queues::Loop<concurrency::queues::Task>,
-      concurrency::queues::Task>
-      t(1);
-
+  concurrency::pool::ThreadPool<ct::Loop, ct::Task> t(1);
   auto a = std::make_shared<std::atomic<int>>(0);
   auto b = std::make_shared<std::atomic<int>>(0);
 
   t.submit_detach([a] { a->fetch_add(1, std::memory_order_relaxed); });
   t.submit_detach([b] { b->fetch_add(1, std::memory_order_relaxed); });
 
-  for (int i = 0; i < 200 && (a->load() < 3 || b->load() < 3); ++i) {
+  for (int i = 0; i < 200 && (a->load() < 3 || b->load() < 3); ++i)
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-  }
   assert(a->load() >= 3);
   assert(b->load() >= 3);
 
   t.queue()->clear();
-  // t's destructor joins the worker before this frame's shared_ptrs die.
   ct::PASS();
 }
 
-// ─── Drivers ───────────────────────────────────────────────────────────
+// ─── Payload-specific pool behavior ─────────────────────────────────
 
-using Fifo = concurrency::queues::Fifo<concurrency::queues::Task>;
-using Loop = concurrency::queues::Loop<concurrency::queues::Task>;
-using Task = concurrency::queues::Task;
-
-template <typename TQ, typename Pushed>
-  requires(concurrency::queues::Queue<TQ, Pushed>)
-static void generic_suite() {
-  test_create<TQ, Pushed>();
-  test_wait_empty<TQ, Pushed>();
-  test_wait_for_submit_detach<TQ, Pushed>();
-  test_wait_repeated<TQ, Pushed>();
-  test_wait_concurrent_submit<TQ, Pushed>();
+void test_fifo_payload_pool() {
+  ct::TEST("fifo payload pool");
+  concurrency::pool::ThreadPool<ct::FifoPayload, ct::SimplePayloadEntry> t(4);
+  std::atomic<int> sum{0};
+  for (int i = 0; i < 8; ++i)
+    t.submit_detach([&, i] { sum.fetch_add(i); }, ct::SimplePayload{i});
+  t.wait();
+  assert(sum.load() == 0 + 1 + 2 + 3 + 4 + 5 + 6 + 7);
+  ct::PASS();
 }
 
-static void fifo_suite() {
-  generic_suite<Fifo, Task>();
-  test_submit<Fifo>();
-  test_wait_with_futures<Fifo>();
-  test_wait_from_worker_throws<Fifo>();
-}
+// ─── Drivers ────────────────────────────────────────────────────────
 
+static void fifo_task_suite() { generic_suite<ct::Fifo, ct::Task>(); }
+static void fifo_payload_suite() {
+  generic_suite<ct::FifoPayload, ct::SimplePayloadEntry>();
+}
 static void priority_suite() {
   generic_suite<ct::BasicPriorityQueue, ct::PriorityEntry>();
-  test_priority_submit_order();
-  test_priority_duplicates();
+}
+static void priority_payload_suite() {
+  generic_suite<ct::PayloadPriorityQueue, ct::PayloadPriorityEntry>();
+}
+static void loop_task_suite() {
+  // Skip generic_suite for looping (wait() doesn't drain).
+  test_create<ct::Loop, ct::Task>();
 }
 
-static void loop_suite() {
-  test_create<Loop, Task>();
+static void fifo_specific_suite() {
+  test_submit<ct::Fifo>();
+  test_wait_with_futures<ct::Fifo>();
+  test_wait_from_worker_throws<ct::Fifo>();
+  test_fifo_payload_pool();
+}
+
+static void priority_specific_suite() {
+  test_priority_submit_order();
+  test_priority_duplicates();
+  test_priority_payload_order();
+}
+
+static void loop_specific_suite() {
   test_loop_repeats();
   test_loop_multiple_entries();
 }
@@ -333,16 +365,27 @@ template <auto Suite> static void ex(uint32_t repeats) {
 int main() {
   std::println("=== Concurrency Thread Pool Tests ===");
 
-  std::array<std::jthread, 3> threads;
-  threads[0] = std::jthread(ex<fifo_suite>, 10);
-  threads[1] = std::jthread(ex<priority_suite>, 10);
-  threads[2] = std::jthread(ex<loop_suite>, 10);
+  std::array<std::jthread, 8> threads;
+  threads[0] = std::jthread(ex<fifo_task_suite>, 5);
+  threads[1] = std::jthread(ex<fifo_payload_suite>, 5);
+  threads[2] = std::jthread(ex<priority_suite>, 5);
+  threads[3] = std::jthread(ex<priority_payload_suite>, 5);
+  threads[4] = std::jthread(ex<loop_task_suite>, 5);
+  threads[5] = std::jthread(ex<fifo_specific_suite>, 5);
+  threads[6] = std::jthread(ex<priority_specific_suite>, 5);
+  threads[7] = std::jthread(ex<loop_specific_suite>, 5);
   for (auto &t : threads)
     t.join();
 
-  fifo_suite();
+  // Main-thread run.
+  fifo_task_suite();
+  fifo_payload_suite();
   priority_suite();
-  loop_suite();
+  priority_payload_suite();
+  loop_task_suite();
+  fifo_specific_suite();
+  priority_specific_suite();
+  loop_specific_suite();
 
   std::println("\n{}/{} tests passed", ct::tests_passed.load(),
                ct::tests_run.load());

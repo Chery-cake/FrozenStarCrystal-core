@@ -9,6 +9,11 @@ export namespace ct {
 
 using concurrency::queues::Task;
 
+using Task = concurrency::queues::Task;
+using B = concurrency::queues::Behaviour;
+using Fifo = concurrency::queues::Fifo<Task>;
+using Loop = concurrency::queues::Loop<Task>;
+
 // ─── Fifo / Loop entries ─────────────────────────────────────────────
 
 struct SimplePayload {
@@ -100,6 +105,17 @@ struct PayloadPriorityEntry {
 
 using PayloadPriorityQueue =
     concurrency::queues::Priority<PayloadPriorityEntry>;
+
+// Entry whose score is computed via a member function, rather than read
+// from a plain field.
+struct ComputedEntry {
+  Task task;
+  int base = 0;
+  int boost = 0;
+  int priority() const { return base + boost; }
+  static ComputedEntry make(Task t) { return {std::move(t), 0, 0}; }
+};
+using ComputedPriorityQueue = concurrency::queues::Priority<ComputedEntry>;
 
 // ─── Aging variants ──────────────────────────────────────────────────
 
