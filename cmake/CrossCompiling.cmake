@@ -163,8 +163,8 @@ if(NOT DEFINED CMAKE_C_COMPILER)
 endif()
 
 # Architecture flags
-add_compile_options(-arch ${OSX_ARCH})
-add_link_options(-arch ${OSX_ARCH})
+# add_compile_options(-arch ${OSX_ARCH})
+# add_link_options(-arch ${OSX_ARCH})
 
 # Search paths
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

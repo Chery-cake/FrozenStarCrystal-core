@@ -61,51 +61,82 @@
           "-DCMAKE_CXX_COMPILER_RANLIB=${llvmTools}/bin/llvm-ranlib"
           "-DCMAKE_LINKER_TYPE=LLD"
         ];
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          # Packages available in the shell
-          nativeBuildInputs = [
-            pkgs.git
+
+        # Common packages for both shells
+        commonPackages = [
+          pkgs.git
+          cmake
+          pkgs.ninja
+          pkgs.perf
+        ];
+
+                # --- Linux (native) shell ---
+        linuxShell = pkgs.mkShell {
+          nativeBuildInputs = commonPackages ++ [
             gcc
             clang
             lld
-            cmake
-            pkgs.ninja
             glibcDev
             llvmTools
-            pkgs.perf
           ];
 
           env = {
             CXXFLAGS = flags;
             CFLAGS = flags;
-
-            NIX_LDFLAGS =
-              with builtins;
-              concatStringsSep " " [
-                "-L${gccUnwrapped}/lib"
-                "-L${gccUnwrapped}/lib64"
-              ];
-
+            NIX_LDFLAGS = with builtins; concatStringsSep " " [
+              "-L${gccUnwrapped}/lib"
+              "-L${gccUnwrapped}/lib64"
+            ];
             CXX_MODULES_JSON = "${gccUnwrapped}/lib/libstdc++.modules.json";
-
             USE_LLVM_LTO = "1";
-
-            # Disable fortify hardening only
             NIX_HARDENING_ENABLE = hardeningDisableFortify;
           };
 
-          # Shell hook: runs after entering the shell (enterShell equivalent)
           shellHook = ''
             export CC="${clang}/bin/clang"
             export CXX="${clang}/bin/clang++"
-
             echo "C compiler:   $CC   ($( $CC   --version | head -n1 ))"
             echo "C++ compiler: $CXX ($( $CXX --version | head -n1 ))"
-
             settings --cmake-extra-flags "${extraFlags}"
           '';
+        };
+
+        # --- Windows (cross-compilation) shell ---
+        mingwPkgs = pkgs.pkgsCross.mingwW64;
+        windowsShell = mingwPkgs.mkShell {
+          nativeBuildInputs = commonPackages ++ [
+            mingwPkgs.stdenv.cc
+            pkgs.wine64Packages.stable
+          ];
+
+          # mcfgthreads is a Windows‑target library – it belongs in buildInputs.
+          buildInputs = [
+            mingwPkgs.windows.mcfgthreads
+          ];
+
+          shellHook = ''
+            # Host flags from `linuxShell` must NOT leak into a cross build.
+            unset CXXFLAGS CFLAGS CPPFLAGS LDFLAGS
+            unset NIX_CFLAGS_COMPILE NIX_CXXSTDLIB_COMPILE NIX_LDFLAGS
+            unset CXX_MODULES_JSON
+            export NIX_LDFLAGS="-L${mingwPkgs.windows.mcfgthreads}/lib $NIX_LDFLAGS"
+
+            export CC="${mingwPkgs.stdenv.cc}/bin/x86_64-w64-mingw32-gcc"
+            export CXX="${mingwPkgs.stdenv.cc}/bin/x86_64-w64-mingw32-g++"
+
+            export CXX_MODULES_JSON="$($CXX -print-file-name=libstdc++.modules.json)"
+
+            echo "Windows cross-compiler: $CXX"
+            $CXX --version | head -n1
+
+            settings --toolchain windows-x86_64 --cmake-extra-flags "" --sanitizers ""
+          '';
+        };
+      in
+      {
+        devShells = {
+          default = linuxShell;
+          windows = windowsShell;
         };
       }
     );

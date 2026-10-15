@@ -103,6 +103,12 @@ CMakeUserPresets.json
 build/
 .cache
 
+/build/
+/build-*/
+/toolchains/
+*/CPM.cmake
+*/CPM.version
+
 # Direnv
 .direnv
 
@@ -117,3 +123,4 @@ bin/
 *.fsc_config
 perf.data
 */perf.data
+
