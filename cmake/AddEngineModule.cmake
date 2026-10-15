@@ -52,7 +52,7 @@ endfunction()
 # ------------------------------------------------------------------------------
 function(add_module)
     cmake_parse_arguments(ARG "" ""
-        "SOURCES;PUBLIC_HEADERS;PRIVATE_HEADERS;MODULES;PUBLIC_DEPS;PRIVATE_DEPS"
+        "SOURCES;PUBLIC_HEADERS;PRIVATE_HEADERS;MODULES;PUBLIC_DEPS;PRIVATE_DEPS;EXTRA_SOURCES;EXTRA_PUBLIC_HEADERS;EXTRA_PRIVATE_HEADERS;EXTRA_MODULES"
         ${ARGN})
 
     # --- Auto-discovery (matches your previous conventions) -----------------
@@ -85,6 +85,12 @@ function(add_module)
             "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cc"
         )
     endif()
+
+    # --- Merge extras into the primary lists --------------------------------
+    list(APPEND ARG_SOURCES          ${ARG_EXTRA_SOURCES})
+    list(APPEND ARG_PUBLIC_HEADERS   ${ARG_EXTRA_PUBLIC_HEADERS})
+    list(APPEND ARG_PRIVATE_HEADERS  ${ARG_EXTRA_PRIVATE_HEADERS})
+    list(APPEND ARG_MODULES          ${ARG_EXTRA_MODULES})
 
     # --- Target -------------------------------------------------------------
     add_library(${PROJECT_NAME})

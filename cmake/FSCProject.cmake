@@ -39,6 +39,8 @@ include(${FSC_CMAKE_DIR}/AddEngineModule.cmake)
 # Pin the version so bumps are explicit. Bumping the string triggers a
 # re-download on the next configure; nothing to delete by hand.
 set(FSC_CPM_VERSION "v0.43.2" CACHE STRING "CPM.cmake version to fetch")
+set(FETCHCONTENT_QUIET FALSE CACHE BOOL
+    "Show FetchContent/CPM download progress" FORCE)
 
 macro(fsc_ensure_cpm)
     # Already loaded in this project tree (a parent already ran this macro).
