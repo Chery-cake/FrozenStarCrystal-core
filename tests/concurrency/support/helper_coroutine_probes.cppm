@@ -65,12 +65,12 @@ auto external(concurrency::pool::ThreadPool<TQ, Pushed> &t)
 
 template <typename TQ, typename Pushed, Queue QP, Suspend SP, typename... Args>
   requires(SchedulableQueue<TQ, Pushed> &&
-           PayloadEntryFrom<TQ, Pushed, std::decay_t<Args>...>)
+           PayloadEntryFrom<TQ, Pushed, Args...>)
 auto probe_with_payload(concurrency::pool::ThreadPool<TQ, Pushed> &t,
-                        bool &flag, Args &&...args)
+                        bool &flag, Args... args)
     -> cr::CoroutineTask<TQ, Pushed, SP, void> {
   const bool before = cr::isPoolWorker;
-  co_await t.template schedule<QP>(std::forward<Args>(args)...);
+  co_await t.template schedule<QP>(std::move(args)...);
   flag = (!before && cr::isPoolWorker);
 }
 

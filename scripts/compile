@@ -51,12 +51,30 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Configure first if needed (keep the same toolchain choice)
+# Reconcile CMake state with the current config.
 # ---------------------------------------------------------------------------
+RECONFIGURE=0
+FORCE_FRESH=0
+
 if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
     echo "Build dir not configured — running build first..."
+    RECONFIGURE=1
+    FORCE_FRESH=1
+else
+    LAST_HASH=""
+    [ -f "$BUILD_DIR/.fsc_config_hash" ] && LAST_HASH="$(cat "$BUILD_DIR/.fsc_config_hash")"
+    CUR_HASH="$("$SCRIPT_DIR/lib/config-hash" "$BUILD_DIR")"
+    if [ "$LAST_HASH" != "$CUR_HASH" ]; then
+        echo "Config changed since last configure — forcing fresh configure..."
+        RECONFIGURE=1
+        FORCE_FRESH=1
+    fi
+fi
+
+if [ "$RECONFIGURE" -eq 1 ]; then
     BUILD_FLAGS=(--build-dir "$BUILD_DIR")
     [ -n "$EFFECTIVE_TOOLCHAIN" ] && BUILD_FLAGS+=(--toolchain "$EFFECTIVE_TOOLCHAIN")
+    [ "$FORCE_FRESH" -eq 1 ] && BUILD_FLAGS+=(--force)
     "$SCRIPT_DIR/build" "${BUILD_FLAGS[@]}"
 fi
 

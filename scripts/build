@@ -20,18 +20,20 @@ cd "$PROJECT_ROOT"
 CLI_TOOLCHAIN=""
 CLI_TOOLCHAIN_SET=0
 BUILD_DIR_OVERRIDE=""
+FORCE_FRESH=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --toolchain)  CLI_TOOLCHAIN="$2"; CLI_TOOLCHAIN_SET=1; shift 2 ;;
         --build-dir)  BUILD_DIR_OVERRIDE="$2"; shift 2 ;;
+        --force)      FORCE_FRESH=1; shift ;;
         --help|-h)
             cat <<EOF
-Usage: scripts/build [--toolchain <platform>] [--build-dir <path>]
+Usage: scripts/build [--toolchain <platform>] [--build-dir <path>] [--force]
 
-  --toolchain <platform>  Override TOOLCHAIN from config for this invocation.
-                          Use --toolchain "" to force a native build.
-  --build-dir <path>      Explicit build directory (overrides everything).
+  --toolchain <platform>  Override TOOLCHAIN for this invocation.
+  --build-dir <path>      Explicit build directory.
+  --force                 Force a fresh configure (ignore cached cache values).
 EOF
             exit 0
             ;;
@@ -109,5 +111,12 @@ fi
 echo "Build dir:  $BUILD_DIR"
 echo "Toolchain:  ${EFFECTIVE_TOOLCHAIN:-<native>}"
 echo "Generator:  ${BUILD_SYSTEM}"
+[ "$FORCE_FRESH" -eq 1 ] && echo "Fresh:      yes"
 
-cmake -Wno-dev "${CMAKE_ARGS[@]}" -B "$BUILD_DIR" -G "$BUILD_SYSTEM"
+CMAKE_FRESH=()
+[ "$FORCE_FRESH" -eq 1 ] && CMAKE_FRESH+=(--fresh)
+
+cmake -Wno-dev "${CMAKE_FRESH[@]}" "${CMAKE_ARGS[@]}" -B "$BUILD_DIR" -G "$BUILD_SYSTEM" || exit $?
+
+# Record the config signature so compile/tests know when to reconfigure.
+"$SCRIPT_DIR/lib/config-hash" "$BUILD_DIR" > "$BUILD_DIR/.fsc_config_hash"
