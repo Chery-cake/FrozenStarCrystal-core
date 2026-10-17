@@ -34,6 +34,8 @@ include(${FSC_CMAKE_DIR}/CrossCompiling.cmake)
 include(${FSC_CMAKE_DIR}/sanitizers.cmake)
 include(${FSC_CMAKE_DIR}/GenerateClangd.cmake)
 include(${FSC_CMAKE_DIR}/AddEngineModule.cmake)
+include(${FSC_CMAKE_DIR}/FSCDeps.cmake)
+include(${FSC_CMAKE_DIR}/FSCLocals.cmake)
 
 # --- CPM.cmake bootstrap -------------------------------------------------------
 # Pin the version so bumps are explicit. Bumping the string triggers a
@@ -43,40 +45,39 @@ set(FETCHCONTENT_QUIET FALSE CACHE BOOL
     "Show FetchContent/CPM download progress" FORCE)
 
 macro(fsc_ensure_cpm)
-    # Already loaded in this project tree (a parent already ran this macro).
-    # CPM.cmake sets CPM_VERSION as an internal cache var when included.
-    if(DEFINED CPM_VERSION)
-        return()
-    endif()
+    if(NOT DEFINED CPM_VERSION)
+        # Disable CPM's external source cache: deps must live inside each
+        # project's own build/_deps/ so sibling checkouts can share them.
+        set(CPM_SOURCE_CACHE OFF CACHE STRING
+            "CPM source cache (disabled — deps live in build/_deps)" FORCE)
 
-    # Always live in the TOP-LEVEL build dir, so every subproject shares one copy.
-    # Wiping build/ re-downloads; no other cleanup required.
-    set(_cpm_dir  "${CMAKE_BINARY_DIR}")
-    set(_cpm_file "${_cpm_dir}/CPM.cmake")
-    set(_cpm_ver  "${_cpm_dir}/.CPM.version")
+        set(_cpm_dir  "${CMAKE_BINARY_DIR}")
+        set(_cpm_file "${_cpm_dir}/CPM.cmake")
+        set(_cpm_ver  "${_cpm_dir}/.CPM.version")
 
-    file(MAKE_DIRECTORY "${_cpm_dir}")
+        file(MAKE_DIRECTORY "${_cpm_dir}")
 
-    set(_have_version "")
-    if(EXISTS "${_cpm_ver}")
-        file(READ "${_cpm_ver}" _have_version)
-        string(STRIP "${_have_version}" _have_version)
-    endif()
-
-    if(NOT EXISTS "${_cpm_file}" OR NOT _have_version STREQUAL FSC_CPM_VERSION)
-        set(_cpm_url
-            "https://github.com/cpm-cmake/CPM.cmake/releases/download/${FSC_CPM_VERSION}/CPM.cmake")
-        message(STATUS "Fetching CPM.cmake ${FSC_CPM_VERSION} -> ${_cpm_file}")
-        file(DOWNLOAD "${_cpm_url}" "${_cpm_file}"
-            STATUS _cpm_status TLS_VERIFY ON)
-        list(GET _cpm_status 0 _cpm_code)
-        if(NOT _cpm_code EQUAL 0)
-            message(FATAL_ERROR "Failed to download CPM.cmake: ${_cpm_status}")
+        set(_have_version "")
+        if(EXISTS "${_cpm_ver}")
+            file(READ "${_cpm_ver}" _have_version)
+            string(STRIP "${_have_version}" _have_version)
         endif()
-        file(WRITE "${_cpm_ver}" "${FSC_CPM_VERSION}")
-    endif()
 
-    include("${_cpm_file}")
+        if(NOT EXISTS "${_cpm_file}" OR NOT _have_version STREQUAL FSC_CPM_VERSION)
+            set(_cpm_url
+                "https://github.com/cpm-cmake/CPM.cmake/releases/download/${FSC_CPM_VERSION}/CPM.cmake")
+            message(STATUS "Fetching CPM.cmake ${FSC_CPM_VERSION} -> ${_cpm_file}")
+            file(DOWNLOAD "${_cpm_url}" "${_cpm_file}"
+                STATUS _cpm_status TLS_VERIFY ON)
+            list(GET _cpm_status 0 _cpm_code)
+            if(NOT _cpm_code EQUAL 0)
+                message(FATAL_ERROR "Failed to download CPM.cmake: ${_cpm_status}")
+            endif()
+            file(WRITE "${_cpm_ver}" "${FSC_CPM_VERSION}")
+        endif()
+
+        include("${_cpm_file}")
+    endif()
 endmacro()
 
 # ==============================================================================

@@ -97,7 +97,7 @@
             export CXX="${clang}/bin/clang++"
             echo "C compiler:   $CC   ($( $CC   --version | head -n1 ))"
             echo "C++ compiler: $CXX ($( $CXX --version | head -n1 ))"
-            settings --cmake-extra-flags "${extraFlags}"
+            settings --toolchain "" --cmake-extra-flags "${extraFlags}"
           '';
         };
 

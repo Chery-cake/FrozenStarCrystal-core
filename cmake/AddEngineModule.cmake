@@ -137,8 +137,8 @@ function(add_module)
         SOVERSION                  ${PROJECT_VERSION_MAJOR}
         EXPORT_NAME                ${PROJECT_NAME}
         POSITION_INDEPENDENT_CODE  ON
-        CXX_VISIBILITY_PRESET      hidden
-        VISIBILITY_INLINES_HIDDEN  ON
+        #CXX_VISIBILITY_PRESET      hidden
+        #VISIBILITY_INLINES_HIDDEN  ON
     )
 
     # --- Export header ------------------------------------------------------
