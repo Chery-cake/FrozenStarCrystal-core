@@ -69,5 +69,9 @@ add_tests_from_folder("concurrency"
     LIBRARY
         ${MAIN_LIB}
 )
+add_tests_from_folder("files"
+    LIBRARY
+        ${MAIN_LIB}
+)
 
 message(STATUS "Tests configured successfully")
