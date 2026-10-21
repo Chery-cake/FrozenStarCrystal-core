@@ -45,7 +45,7 @@ set(FETCHCONTENT_QUIET FALSE CACHE BOOL
     "Show FetchContent/CPM download progress" FORCE)
 
 macro(fsc_ensure_cpm)
-    if(NOT DEFINED CPM_VERSION)
+    if(NOT DEFINED CPM_VERSION OR NOT COMMAND CPMAddPackage)
         # Disable CPM's external source cache: deps must live inside each
         # project's own build/_deps/ so sibling checkouts can share them.
         set(CPM_SOURCE_CACHE OFF CACHE STRING

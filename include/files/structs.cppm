@@ -57,6 +57,7 @@ enum class Location : std::uint8_t {
   Data,       // long-term user data — %LOCALAPPDATA%, $XDG_DATA_HOME,
               // ~/Library/Application Support
   Executable, // directory containing the running executable
+  Absolute,   // absolute path, no pre defined location TODO
 };
 
 inline std::span<const std::byte> as_span(std::string_view sv) noexcept {

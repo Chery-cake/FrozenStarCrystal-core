@@ -135,6 +135,44 @@ void test_find() {
   }
 }
 
+void test_find_all_across() {
+  temp_dir td;
+  auto app = td.dir.lexically_relative(*default_dir<Location::Temp>()).string();
+
+  // Two variations, each containing marker.txt
+  auto a = td.file("a/marker.txt");
+  auto b = td.file("b/marker.txt");
+  std::filesystem::create_directories(a.parent_path());
+  std::filesystem::create_directories(b.parent_path());
+  assert(save_atomic(a, blob{}).has_value());
+  assert(save_atomic(b, blob{}).has_value());
+
+  std::array vars{path{"a"}, path{"b"}};
+
+  // find_all_across: all variations → 2 hits, in order
+  auto all = find_all<Location::Temp>(path{"marker.txt"}, vars, app);
+  assert(all && all->size() == 2);
+  assert((*all)[0] == a);
+  assert((*all)[1] == b);
+
+  // Dedup: same variation twice → still 2 unique paths
+  std::array dup{path{"a"}, path{"a"}, path{"b"}};
+  auto deduped = find_all<Location::Temp>(path{"marker.txt"}, dup, app);
+  assert(deduped && deduped->size() == 2);
+
+  // Empty variation is skipped, not re-searched
+  std::array with_empty{path{}, path{"a"}};
+  auto cleaned = find_all<Location::Temp>(path{"marker.txt"}, with_empty, app);
+  assert(cleaned && cleaned->size() == 1);
+  assert((*cleaned)[0] == a);
+
+  // Runtime order overload agrees with the pack version
+  Location ord[] = {Location::Temp};
+  auto via_order =
+      find_all(std::span<const Location>(ord), path{"marker.txt"}, vars, app);
+  assert(via_order && *via_order == *all);
+}
+
 } // namespace
 
 int main() {
@@ -142,6 +180,7 @@ int main() {
   test_ensure_dir();
   test_default_path();
   test_find();
+  test_find_all_across();
   std::puts("test_locations: ok");
   return 0;
 }

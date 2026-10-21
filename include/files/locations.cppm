@@ -100,6 +100,15 @@ inline path executable_path() {
 // ── public API ─────────────────────────────────────────────────────────
 export namespace files {
 
+[[nodiscard]] inline std::expected<bool, error> exists(const path &p) noexcept {
+  std::error_code ec;
+  bool r = std::filesystem::exists(p, ec);
+  if (ec) {
+    return std::unexpected{error{ec, p, "exists"}};
+  }
+  return r;
+}
+
 // Compile-time dispatch (preferred when Location is known at call site).
 template <Location L>
 [[nodiscard]] std::expected<path, error>
@@ -179,6 +188,15 @@ ensure_dir(Location loc, std::string_view app = {}) {
   return d;
 }
 
+[[nodiscard]] inline std::expected<path, error> ensure_dir(const path &p) {
+  std::error_code ec;
+  std::filesystem::create_directories(p, ec);
+  if (ec) {
+    return std::unexpected{error{ec, p, "ensure_dir"}};
+  }
+  return p;
+}
+
 // ── default_path ───────────────────────────────────────────────────────
 template <Location L>
 [[nodiscard]] std::expected<path, error>
@@ -223,6 +241,8 @@ export namespace files {
 template <Location... Ls>
 [[nodiscard]] inline std::expected<path, error>
 find(const path &relative, std::string_view app = {}) {
+  static_assert(sizeof...(Ls) > 0, "Need to add Locations");
+
   std::optional<path> found;
   ((found = try_find<Ls>(relative, app)).has_value() || ...);
   if (!found) {
@@ -232,9 +252,42 @@ find(const path &relative, std::string_view app = {}) {
   return std::move(*found);
 }
 
+template <Location... Ls, std::ranges::input_range V>
+  requires std::convertible_to<std::ranges::range_value_t<V>, const path>
 [[nodiscard]] inline std::expected<path, error>
-find(std::span<const Location> order, const path &relative,
+find(const path &relative, V &&variations, std::string_view app = {}) {
+  static_assert(sizeof...(Ls) > 0, "Need to add Locations");
+
+  if (auto hit = find<Ls...>(relative, app)) {
+    return hit;
+  }
+
+  for (const auto &v : variations) {
+    if (v.empty()) {
+      continue;
+    }
+    if (auto hit = find<Ls...>(v / relative, app)) {
+      return hit;
+    }
+  }
+
+  return std::unexpected{
+      error{"not found in any location or variation", relative, "find"}};
+}
+
+template <Location... Ls>
+[[nodiscard]] inline std::expected<path, error>
+find(const path &relative, std::initializer_list<path> variations,
      std::string_view app = {}) {
+  return find<Ls...>(
+      relative, std::span<const path>{variations.begin(), variations.end()},
+      app);
+}
+
+template <std::ranges::input_range O>
+  requires std::convertible_to<std::ranges::range_value_t<O>, const Location>
+[[nodiscard]] inline std::expected<path, error>
+find(O &&order, const path &relative, std::string_view app = {}) {
   auto valid = order |
                std::views::transform([&](Location loc) -> std::optional<path> {
                  auto d = default_dir(loc, app);
@@ -257,13 +310,187 @@ find(std::span<const Location> order, const path &relative,
   return *it;
 }
 
-// initializer_list convenience: find({Location::Data, Location::Executable},
-// ...)
 [[nodiscard]] inline std::expected<path, error>
 find(std::initializer_list<Location> order, const path &relative,
      std::string_view app = {}) {
   return find(std::span<const Location>{order.begin(), order.size()}, relative,
               app);
+}
+
+template <std::ranges::input_range O, std::ranges::input_range V>
+  requires std::convertible_to<std::ranges::range_value_t<O>, const Location> &&
+           std::convertible_to<std::ranges::range_value_t<V>, const path>
+[[nodiscard]] inline std::expected<path, error>
+find(O &&order, const path &relative, V &&variations,
+     std::string_view app = {}) {
+  if (auto hit = find(order, relative, app)) {
+    return hit;
+  }
+
+  for (const auto &v : variations) {
+    if (v.empty()) {
+      continue;
+    }
+    if (auto hit = find(order, v / relative, app)) {
+      return hit;
+    }
+  }
+
+  return std::unexpected{
+      error{"not found in any location or variation", relative, "find"}};
+}
+
+[[nodiscard]] inline std::expected<path, error>
+find(std::initializer_list<Location> order, const path &relative,
+     std::initializer_list<path> variations, std::string_view app = {}) {
+  return find(std::span<const Location>{order.begin(), order.size()}, relative,
+              std::span<const path>{variations.begin(), variations.end()}, app);
+}
+
+template <Location... Ls>
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(const path &relative, std::string_view app = {}) {
+  static_assert(sizeof...(Ls) > 0, "Need to add Locations");
+
+  std::vector<path> out;
+  out.reserve(sizeof...(Ls));
+  (
+      [&] {
+        if (auto p = try_find<Ls>(relative, app)) {
+          out.push_back(std::move(*p));
+        }
+      }(),
+      ...);
+  if (out.empty()) {
+    return std::unexpected{
+        error{"not found in any location", relative, "find_all"}};
+  }
+  return out;
+}
+
+template <Location... Ls, std::ranges::input_range V>
+  requires std::convertible_to<std::ranges::range_value_t<V>, path>
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(const path &relative, V &&variations, std::string_view app = {}) {
+  static_assert(sizeof...(Ls) > 0, "Need to add Locations");
+
+  std::vector<path> out;
+  std::unordered_set<path> seen;
+
+  auto absorb = [&seen, &out](std::expected<std::vector<path>, error> hits) {
+    if (!hits) {
+      return;
+    }
+    for (auto &p : *hits) {
+      if (seen.insert(p).second) {
+        out.push_back(std::move(p));
+      }
+    };
+  };
+
+  absorb(find_all<Ls...>(relative, app));
+  for (const auto &v : variations) {
+    if (v.empty()) {
+      continue;
+    }
+    absorb(find_all<Ls...>(v / relative, app));
+  }
+
+  if (out.empty()) {
+    return std::unexpected{
+        error{"not found in any location or variation", relative, "find_all"}};
+  }
+
+  return out;
+}
+
+template <Location... Ls>
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(const path &relative, std::initializer_list<path> variations,
+         std::string_view app = {}) {
+  return find_all<Ls...>(
+      relative, std::span<const path>{variations.begin(), variations.end()},
+      app);
+}
+
+template <std::ranges::input_range O>
+  requires std::convertible_to<std::ranges::range_value_t<O>, const Location>
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(O &&order, const path &relative, std::string_view app = {}) {
+  auto valid = order |
+               std::views::transform([&](Location loc) -> std::optional<path> {
+                 auto d = default_dir(loc, app);
+                 return d ? std::optional<path>{*d / relative} : std::nullopt;
+               }) |
+               std::views::filter([](auto &&o) {
+                 if (!o) {
+                   return false;
+                 }
+                 std::error_code ec;
+                 return std::filesystem::exists(*o, ec) && !ec;
+               }) |
+               std::views::transform([](auto &&o) { return std::move(*o); }) |
+               std::ranges::to<std::vector>();
+
+  if (valid.empty()) {
+    return std::unexpected{
+        error{"not found in any location", relative, "find_all"}};
+  }
+  return valid;
+}
+
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(std::initializer_list<Location> order, const path &relative,
+         std::string_view app = {}) {
+  return find_all(std::span<const Location>{order.begin(), order.size()},
+                  relative, app);
+}
+
+template <std::ranges::input_range O, std::ranges::input_range V>
+  requires std::convertible_to<std::ranges::range_value_t<O>, const Location> &&
+           std::convertible_to<std::ranges::range_value_t<V>, const path>
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(O &&order, const path &relative, V &&variations,
+         std::string_view app = {}) {
+
+  std::vector<Location> locs(order.begin(), order.end());
+
+  std::vector<path> out;
+  std::unordered_set<path> seen;
+
+  auto absorb = [&out, &seen](std::expected<std::vector<path>, error> hits) {
+    if (!hits) {
+      return;
+    }
+    for (auto &p : *hits) {
+      if (seen.insert(p).second) {
+        out.push_back(std::move(p));
+      }
+    };
+  };
+
+  absorb(find_all(locs, relative, app));
+  for (const auto &v : variations) {
+    if (v.empty()) {
+      continue;
+    }
+    absorb(find_all(locs, v / relative, app));
+  }
+
+  if (out.empty()) {
+    return std::unexpected{
+        error{"not found in any location or variation", relative, "find_all"}};
+  }
+
+  return out;
+}
+
+[[nodiscard]] inline std::expected<std::vector<path>, error>
+find_all(std::initializer_list<Location> order, const path &relative,
+         std::initializer_list<path> variations, std::string_view app = {}) {
+  return find_all(
+      std::span<const Location>{order.begin(), order.size()}, relative,
+      std::span<const path>{variations.begin(), variations.end()}, app);
 }
 
 } // namespace files
