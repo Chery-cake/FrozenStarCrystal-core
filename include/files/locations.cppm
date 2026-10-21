@@ -139,7 +139,22 @@ default_dir(std::string_view app = {}) {
       return std::unexpected{
           error{"cannot resolve executable", {}, "default_dir:exe"}};
     }
+
     return exe.parent_path(); // no app subdir
+  }
+  if constexpr (L == Location::Absolute) {
+    if (app.empty()) {
+      return std::unexpected{error{"absolute location requires a base path",
+                                   {},
+                                   "default_dir:absolute"}};
+    }
+    path base{std::string(app)};
+    if (!base.is_absolute()) {
+      return std::unexpected{
+          error{"absolute location requires an absolute path", base,
+                "default_dir:absolute"}};
+    }
+    return base;
   } else {
     return std::unexpected{error{"invalid location", {}, "default_dir"}};
   }
@@ -155,6 +170,8 @@ default_dir(Location loc, std::string_view app = {}) {
     return default_dir<Location::Data>(app);
   case Location::Executable:
     return default_dir<Location::Executable>(app);
+  case Location::Absolute:
+    return default_dir<Location::Absolute>(app);
   }
   return std::unexpected{error{"invalid location", {}, "default_dir"}};
 }

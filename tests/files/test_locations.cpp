@@ -173,6 +173,48 @@ void test_find_all_across() {
   assert(via_order && *via_order == *all);
 }
 
+void test_absolute() {
+  temp_dir td;
+  auto base = td.dir; // already absolute
+  auto target = base / "abs.txt";
+  assert(save_atomic(target, to_blob(std::string_view{"hi"})).has_value());
+
+  // Happy path
+  {
+    auto r = default_dir<Location::Absolute>(base.string());
+    assert(r && *r == base);
+  }
+  {
+    auto r = default_path<Location::Absolute>(path{"abs.txt"}, base.string());
+    assert(r && *r == target);
+  }
+  {
+    auto r = find<Location::Absolute>(path{"abs.txt"}, base.string());
+    assert(r && *r == target);
+  }
+
+  // Missing file
+  {
+    auto r = find<Location::Absolute>(path{"missing.txt"}, base.string());
+    assert(!r.has_value());
+  }
+
+  // Empty base
+  assert(!default_dir<Location::Absolute>().has_value());
+
+  // Relative base
+  assert(!default_dir<Location::Absolute>("relative/dir").has_value());
+
+  // Runtime dispatch agrees
+  assert(default_dir(Location::Absolute, base.string()) == base);
+  {
+    Location ord[] = {Location::Absolute};
+    auto r =
+        find(std::span<const Location>(ord), path{"abs.txt"}, base.string());
+    assert(r && *r == target);
+  }
+}
+
 } // namespace
 
 int main() {
@@ -181,6 +223,7 @@ int main() {
   test_default_path();
   test_find();
   test_find_all_across();
+  test_absolute();
   std::puts("test_locations: ok");
   return 0;
 }
